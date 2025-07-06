@@ -1,0 +1,53 @@
+{
+  "name": "ultimate-input-field",
+  "version": "1.0.0",
+  "description": "A draggable, resizable, dockable input field component with terminal and text modes",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "vite",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm run clean && pnpm run build"
+  },
+  "keywords": [
+    "react",
+    "input",
+    "textarea",
+    "draggable",
+    "resizable",
+    "dockable",
+    "terminal",
+    "ui",
+    "component"
+  ],
+  "author": "Ultimate Input Field Team",
+  "license": "MIT",
+  "peerDependencies": {
+    "react": ">=16.8.0",
+    "react-dom": ">=16.8.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.0.0",
+    "tsup": "^8.0.0",
+    "vite": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AgenticPlace/uif.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AgenticPlace/uif/issues"
+  },
+  "homepage": "https://github.com/AgenticPlace/uif#readme"
+}
