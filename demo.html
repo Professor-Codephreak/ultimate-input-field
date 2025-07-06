@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ultimate Input Field - Enhanced Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <style>
+    :root {
+      --background: 0 0% 100%;
+      --foreground: 222.2 84% 4.9%;
+      --primary: 222.2 47.4% 11.2%;
+      --primary-foreground: 210 40% 98%;
+      --secondary: 210 40% 96%;
+      --secondary-foreground: 222.2 84% 4.9%;
+      --muted: 210 40% 96%;
+      --muted-foreground: 215.4 16.3% 46.9%;
+      --accent: 210 40% 96%;
+      --accent-foreground: 222.2 84% 4.9%;
+      --destructive: 0 84.2% 60.2%;
+      --destructive-foreground: 210 40% 98%;
+      --border: 214.3 31.8% 91.4%;
+      --input: 214.3 31.8% 91.4%;
+      --ring: 222.2 84% 4.9%;
+    }
+    
+    .dark {
+      --background: 222.2 84% 4.9%;
+      --foreground: 210 40% 98%;
+      --primary: 210 40% 98%;
+      --primary-foreground: 222.2 47.4% 11.2%;
+      --secondary: 217.2 32.6% 17.5%;
+      --secondary-foreground: 210 40% 98%;
+      --muted: 217.2 32.6% 17.5%;
+      --muted-foreground: 215 20.2% 65.1%;
+      --accent: 217.2 32.6% 17.5%;
+      --accent-foreground: 210 40% 98%;
+      --destructive: 0 62.8% 30.6%;
+      --destructive-foreground: 210 40% 98%;
+      --border: 217.2 32.6% 17.5%;
+      --input: 217.2 32.6% 17.5%;
+      --ring: 212.7 26.8% 83.9%;
+    }
+    
+    @keyframes glow {
+      0% { 
+        box-shadow: 0 0 5px rgba(74, 222, 128, 0);
+        transform: scale(1);
+      }
+      50% { 
+        box-shadow: 0 0 20px rgba(74, 222, 128, 0.5), 0 0 30px rgba(74, 222, 128, 0.3);
+        transform: scale(1.02);
+      }
+      100% { 
+        box-shadow: 0 0 5px rgba(74, 222, 128, 0);
+        transform: scale(1);
+      }
+    }
+    
+    .animate-glow {
+      animation: glow 0.5s ease-in-out;
+      box-shadow: 0 0 20px rgba(74, 222, 128, 0.5);
+    }
+    
+    /* Enhanced corner resize tabs */
+    .corner-tab {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      background: rgba(99, 102, 241, 0.8);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      z-index: 10;
+      transition: all 0.2s ease;
+      opacity: 0.6;
+    }
+    
+    .corner-tab:hover {
+      background: rgba(99, 102, 241, 1);
+      transform: scale(1.3);
+      opacity: 1;
+      box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+    }
+    
+    .corner-tab.br { 
+      right: -2px; 
+      bottom: -2px; 
+      cursor: nwse-resize;
+      border-radius: 0 0 4px 0;
+    }
+    .corner-tab.bl { 
+      left: -2px; 
+      bottom: -2px; 
+      cursor: nesw-resize;
+      border-radius: 0 0 0 4px;
+    }
+    .corner-tab.tr { 
+      right: -2px; 
+      top: -2px; 
+      cursor: nesw-resize;
+      border-radius: 0 4px 0 0;
+    }
+    .corner-tab.tl { 
+      left: -2px; 
+      top: -2px; 
+      cursor: nwse-resize;
+      border-radius: 4px 0 0 0;
+    }
+    
+    /* Subtle drag handle that only appears on hover */
+    .drag-handle {
+      height: 6px;
+      cursor: move;
+      background: transparent;
+      border-radius: 3px;
+      margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      opacity: 0;
+    }
+    
+    .drag-handle:hover,
+    .drag-handle.dragging {
+      background: rgba(156, 163, 175, 0.3);
+      opacity: 1;
+    }
+    
+    .drag-handle .drag-indicator {
+      width: 20px;
+      height: 2px;
+      background: rgba(156, 163, 175, 0.6);
+      border-radius: 1px;
+      transition: all 0.2s ease;
+    }
+    
+    .drag-handle:hover .drag-indicator,
+    .drag-handle.dragging .drag-indicator {
+      background: rgba(156, 163, 175, 0.8);
+      width: 24px;
+    }
+    
+    .backdrop-blur {
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    
+    .glass-effect {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    
+    .terminal-glass {
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    
+    /* New background color - corporate Linux colors */
+    .enhanced-bg {
+      background: linear-gradient(135deg, #2d3748 0%, #1a202c 50%, #0f1419 100%);
+    }
+  </style>
+</head>
+<body class="enhanced-bg min-h-screen">
+  <div id="root"></div>
+  <script>
+    const { useState, useRef, useEffect } = React;
+
+    // Enhanced icon components with better styling
+    const IconSend = () => React.createElement('span', { 
+      className: 'inline-block w-4 h-4 text-current',
+      style: { transform: 'rotate(90deg)' }
+    }, '➤');
+    
+    const IconTerminal = () => React.createElement('span', { 
+      className: 'inline-block w-4 h-4 text-green-400 font-mono font-bold'
+    }, '>');
+    
+    const IconType = () => React.createElement('span', { 
+      className: 'inline-block w-4 h-4 text-blue-600 font-bold'
+    }, 'T');
+    
+    const IconMenu = () => React.createElement('span', { 
+      className: 'inline-block w-4 h-4 text-gray-600'
+    }, '☰');
+    
+    const IconX = () => React.createElement('span', { 
+      className: 'inline-block w-4 h-4 text-gray-600'
+    }, '✕');
+
+    // Enhanced Button component with original styling
+    function Button({ children, onClick, className = '', disabled, variant = 'default', size = 'default', ...props }) {
+      const baseClasses = "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
+      
+      const variantClasses = {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline"
+      };
+      
+      const sizeClasses = {
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-10 w-10"
+      };
+      
+      return React.createElement(
+        'button',
+        {
+          onClick,
+          disabled,
+          className: `${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`,
+          ...props
+        },
+        children
+      );
+    }
+
+    // Enhanced Ultimate Input Field with corner tabs and subtle drag handle
+    function UltimateInputField({ value, onChange, onSend, isLoading, className }) {
+      const [position, setPosition] = useState({ x: window.innerWidth/2 - 300, y: window.innerHeight/2 - 100 });
+      const [isDragging, setIsDragging] = useState(false);
+      const [isGlowing, setIsGlowing] = useState(false);
+      const [isDocked, setIsDocked] = useState(null);
+      const [isMenuVisible, setIsMenuVisible] = useState(false);
+      const [mode, setMode] = useState('text');
+      const [size, setSize] = useState({ width: 600, height: 120 });
+      const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+      const containerRef = useRef(null);
+      const textareaRef = useRef(null);
+      const [isResizing, setIsResizing] = useState(false);
+      const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 600, height: 120 });
+      const [resizeCorner, setResizeCorner] = useState(null);
+
+      // Drag logic
+      const handlePointerDown = (e) => {
+        if (isDocked) return;
+        setIsDragging(true);
+        setDragOffset({
+          x: e.clientX - position.x,
+          y: e.clientY - position.y
+        });
+        e.preventDefault();
+      };
+      
+      const handlePointerMove = (e) => {
+        if (isDragging && !isDocked) {
+          setPosition({
+            x: e.clientX - dragOffset.x,
+            y: e.clientY - dragOffset.y
+          });
+        }
+        if (isResizing) {
+          const dx = e.clientX - resizeStart.x;
+          const dy = e.clientY - resizeStart.y;
+          
+          let newWidth = resizeStart.width;
+          let newHeight = resizeStart.height;
+          let newX = position.x;
+          let newY = position.y;
+          
+          switch (resizeCorner) {
+            case 'br':
+              // Bottom-right: add to width and height (working correctly)
+              newWidth = Math.max(300, Math.min(800, resizeStart.width + dx));
+              newHeight = Math.max(60, Math.min(400, resizeStart.height + dy));
+              break;
+            case 'bl':
+              // Bottom-left: add to height, subtract from width (expand left)
+              newWidth = Math.max(300, Math.min(800, resizeStart.width - dx));
+              newHeight = Math.max(60, Math.min(400, resizeStart.height + dy));
+              newX = position.x + (resizeStart.width - newWidth);
+              break;
+            case 'tr':
+              // Top-right: width increases with right movement (same as bottom-right)
+              // Height decreases with down movement (opposite of bottom-right since we're resizing from top)
+              newWidth = Math.max(300, Math.min(800, resizeStart.width + dx));
+              newHeight = Math.max(60, Math.min(400, resizeStart.height - dy));
+              newY = position.y + dy; // Move origin down as height decreases
+              break;
+            case 'tl':
+              // Top-left: subtract from both width and height (expand left and up)
+              newWidth = Math.max(300, Math.min(800, resizeStart.width - dx));
+              newHeight = Math.max(60, Math.min(400, resizeStart.height - dy));
+              newX = position.x + (resizeStart.width - newWidth);
+              newY = position.y + (resizeStart.height - newHeight);
+              break;
+          }
+          
+          setSize({ width: newWidth, height: newHeight });
+          if (resizeCorner === 'bl' || resizeCorner === 'tr' || resizeCorner === 'tl') {
+            setPosition({ x: newX, y: newY });
+          }
+        }
+      };
+      
+      const handlePointerUp = () => {
+        setIsDragging(false);
+        setIsResizing(false);
+        setResizeCorner(null);
+      };
+      
+      useEffect(() => {
+        if (isDragging || isResizing) {
+          document.addEventListener('pointermove', handlePointerMove);
+          document.addEventListener('pointerup', handlePointerUp);
+          return () => {
+            document.removeEventListener('pointermove', handlePointerMove);
+            document.removeEventListener('pointerup', handlePointerUp);
+          };
+        }
+      });
+
+      // Enhanced glow effect
+      const triggerGlowEffect = () => {
+        setIsGlowing(true);
+        setTimeout(() => setIsGlowing(false), 500);
+      };
+
+      // Dock logic with smooth transitions
+      const handleDock = (edge) => {
+        setIsDocked(edge);
+        setIsMenuVisible(false);
+        if (edge === null) {
+          setPosition({ x: window.innerWidth/2 - size.width/2, y: window.innerHeight/2 - size.height/2 });
+        }
+      };
+
+      // Keyboard send
+      const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          onSend();
+          triggerGlowEffect();
+        }
+      };
+
+      // Enhanced resize logic for corner tabs
+      const handleCornerResizePointerDown = (e, corner) => {
+        setIsResizing(true);
+        setResizeCorner(corner);
+        setResizeStart({ x: e.clientX, y: e.clientY, width: size.width, height: size.height });
+        e.stopPropagation();
+        e.preventDefault();
+      };
+
+      // Focus textarea on mount
+      useEffect(() => {
+        if (textareaRef.current) textareaRef.current.focus();
+      }, []);
+
+      // Docked style with enhanced positioning
+      let dockStyle = {};
+      if (isDocked === 'top') dockStyle = { top: 0, left: '50%', transform: 'translateX(-50%)', right: 'auto', bottom: 'auto' };
+      if (isDocked === 'bottom') dockStyle = { bottom: 0, left: '50%', transform: 'translateX(-50%)', top: 'auto', right: 'auto' };
+      if (isDocked === 'left') dockStyle = { left: 0, top: '50%', transform: 'translateY(-50%)', right: 'auto', bottom: 'auto' };
+      if (isDocked === 'right') dockStyle = { right: 0, top: '50%', transform: 'translateY(-50%)', left: 'auto', bottom: 'auto' };
+      if (!isDocked) dockStyle = { left: position.x, top: position.y, width: size.width, height: size.height };
+
+      const containerClasses = [
+        'fixed z-[1000] flex flex-col gap-2 p-2 rounded-lg shadow-lg backdrop-blur',
+        isGlowing ? 'animate-glow' : '',
+        isDocked ? 'transition-all duration-300 ease-out' : '',
+        mode === 'terminal' ? 'terminal-glass' : 'glass-effect',
+        className
+      ].filter(Boolean).join(' ');
+
+      return React.createElement('div', {
+        ref: containerRef,
+        className: containerClasses,
+        style: {
+          ...dockStyle,
+          width: size.width,
+          height: size.height,
+          minWidth: 300,
+          maxWidth: 800,
+          minHeight: 60,
+        }
+      }, [
+        // Subtle drag handle that only appears on hover
+        React.createElement('div', {
+          key: 'drag',
+          className: `drag-handle ${isDragging ? 'dragging' : ''}`,
+          onPointerDown: handlePointerDown
+        }, React.createElement('div', { className: 'drag-indicator' })),
+        
+        // Enhanced textarea
+        React.createElement('textarea', {
+          key: 'textarea',
+          ref: textareaRef,
+          value,
+          onChange: e => onChange(e.target.value),
+          onKeyDown: handleKeyDown,
+          placeholder: mode === 'text' ? 'Type a message...' : 'Enter command...',
+          disabled: isLoading,
+          className: `w-full resize-none bg-transparent px-4 py-2 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md transition-all ${mode === 'terminal' ? 'font-mono text-green-400 placeholder-green-400/50' : 'font-sans text-foreground placeholder-muted-foreground'} ${isDragging ? 'pointer-events-none' : ''}`,
+          style: { maxHeight: 200 }
+        }),
+        
+        // Enhanced controls
+        React.createElement('div', { className: 'flex items-center justify-between px-2' }, [
+          React.createElement('div', { className: 'flex items-center gap-2' }, [
+            React.createElement(Button, {
+              key: 'mode',
+              variant: 'ghost',
+              size: 'icon',
+              className: 'h-8 w-8',
+              onClick: () => setMode(mode === 'text' ? 'terminal' : 'text'),
+              type: 'button'
+            }, mode === 'text' ? React.createElement(IconTerminal) : React.createElement(IconType)),
+            React.createElement(Button, {
+              key: 'menu',
+              variant: 'ghost',
+              size: 'icon',
+              className: 'h-8 w-8',
+              onClick: () => setIsMenuVisible(v => !v),
+              type: 'button'
+            }, isMenuVisible ? React.createElement(IconX) : React.createElement(IconMenu)),
+          ]),
+          React.createElement(Button, {
+            key: 'send',
+            variant: 'default',
+            size: 'icon',
+            className: `h-8 w-8 ${isLoading || !value.trim() ? 'opacity-50 cursor-not-allowed' : ''}`,
+            onClick: () => { onSend(); triggerGlowEffect(); },
+            disabled: isLoading || !value.trim(),
+            type: 'button'
+          }, React.createElement(IconSend))
+        ]),
+        
+        // Corner resize tabs - only show when not docked
+        !isDocked && React.createElement('div', { key: 'corner-tabs' }, [
+          React.createElement('div', {
+            key: 'br',
+            className: 'corner-tab br',
+            onPointerDown: (e) => handleCornerResizePointerDown(e, 'br')
+          })
+        ]),
+        
+        // Enhanced menu with glass effect
+        isMenuVisible && React.createElement('div', {
+          className: 'absolute top-full left-0 mt-2 glass-effect rounded-md shadow-lg p-2 border border-border/50',
+          style: { zIndex: 1001, minWidth: 150 }
+        }, React.createElement('div', { className: 'flex flex-col gap-1' }, [
+          React.createElement(Button, {
+            key: 'dock-top',
+            variant: 'ghost',
+            size: 'sm',
+            className: 'justify-start text-left',
+            onClick: () => handleDock('top'),
+            type: 'button'
+          }, 'Dock to Top'),
+          React.createElement(Button, {
+            key: 'dock-bottom',
+            variant: 'ghost',
+            size: 'sm',
+            className: 'justify-start text-left',
+            onClick: () => handleDock('bottom'),
+            type: 'button'
+          }, 'Dock to Bottom'),
+          React.createElement(Button, {
+            key: 'dock-left',
+            variant: 'ghost',
+            size: 'sm',
+            className: 'justify-start text-left',
+            onClick: () => handleDock('left'),
+            type: 'button'
+          }, 'Dock to Left'),
+          React.createElement(Button, {
+            key: 'dock-right',
+            variant: 'ghost',
+            size: 'sm',
+            className: 'justify-start text-left',
+            onClick: () => handleDock('right'),
+            type: 'button'
+          }, 'Dock to Right'),
+          React.createElement('div', { className: 'border-t border-border/50 my-1' }),
+          React.createElement(Button, {
+            key: 'undock',
+            variant: 'ghost',
+            size: 'sm',
+            className: 'justify-start text-left',
+            onClick: () => handleDock(null),
+            type: 'button'
+          }, 'Undock')
+        ]))
+      ]);
+    }
+
+    // Enhanced Demo App with better styling
+    function App() {
+      const [value, setValue] = useState('');
+      const [messages, setMessages] = useState([]);
+      const [isLoading, setIsLoading] = useState(false);
+
+      const handleSend = () => {
+        if (!value.trim()) return;
+        const newMessage = { id: Date.now(), text: value, type: 'user' };
+        setMessages(prev => [...prev, newMessage]);
+        setValue('');
+        setIsLoading(true);
+        setTimeout(() => {
+          const response = { id: Date.now(), text: `Echo: ${newMessage.text}`, type: 'bot' };
+          setMessages(prev => [...prev, response]);
+          setIsLoading(false);
+        }, 1000);
+      };
+
+      return React.createElement('div', { className: 'min-h-screen' }, [
+        React.createElement('div', { className: 'container mx-auto px-4 py-8' }, [
+          React.createElement('h1', { 
+            className: 'text-4xl font-bold text-center mb-8 text-white bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent'
+          }, 'Ultimate Input Field - Enhanced'),
+          React.createElement('p', { 
+            className: 'text-center mb-8 text-white/80 text-lg'
+          }, 'Drag, resize from corners, dock, and interact with the enhanced input field below!'),
+          React.createElement('div', { className: 'mb-8' }, [
+            React.createElement('h2', { 
+              className: 'text-xl font-semibold mb-4 text-white'
+            }, 'Messages:'),
+            React.createElement('div', { 
+              className: 'space-y-2 max-h-64 overflow-y-auto p-4 glass-effect rounded-lg border border-white/20'
+            },
+              messages.map(msg =>
+                React.createElement('div', {
+                  key: msg.id,
+                  className: `p-3 rounded-lg max-w-xs ${msg.type === 'user' ? 'bg-blue-500/20 text-white ml-auto border border-blue-500/30' : 'bg-white/10 text-white mr-auto border border-white/20'}`
+                }, msg.text)
+              )
+            )
+          ])
+        ]),
+        React.createElement(UltimateInputField, {
+          value,
+          onChange: setValue,
+          onSend: handleSend,
+          isLoading,
+          className: 'shadow-2xl'
+        })
+      ]);
+    }
+
+    // Render the app
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(App));
+  </script>
+</body>
+</html> 
