@@ -218,7 +218,7 @@ The component automatically supports dark mode when the `.dark` class is applied
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/ultimate-input-field.git
+git clone https://github.com/Professor-Codephreak/ultimate-input-field
 cd ultimate-input-field
 
 # Install dependencies
