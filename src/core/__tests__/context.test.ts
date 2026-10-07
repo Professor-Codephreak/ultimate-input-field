@@ -90,6 +90,14 @@ describe('.persona', () => {
       'Priorities: growth, safety',
     ]);
   });
+  it('adds awareness facts (bankml.persona) after the other lines', () => {
+    const p = parsePersona(JSON.stringify({
+      name: 'bankML',
+      awareness: { _doc: 'facts', facts: [{ fact: 'My home is github.com/cryptoAGI/bankml.', source: 'README' }, { fact: '  ' }, 'Plain string fact.'] },
+    }));
+    expect(personaLines(p)).toEqual(['What I know about myself:\n- My home is github.com/cryptoAGI/bankml.\n- Plain string fact.']);
+    expect(personaLines(parsePersona('{"awareness": {"facts": "nope"}}'))).toEqual([]);
+  });
   it('refuses malformed personas', () => {
     expect(() => parsePersona('[]')).toThrow(/JSON object/);
     expect(() => parsePersona('{"system_prompt": 3}')).toThrow(/system_prompt/);

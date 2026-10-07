@@ -204,7 +204,7 @@ onSend={async function* (text, { outputId, context }) {
 
 The system prompt is assembled the way bankml and the mindX boardroom do it:
 1. The persona's `system_prompt`, or the `.prompt`.
-2. `Behavioural traits:`, `Operating beliefs:` and `Priorities:` lines from a boardroom persona.
+2. `Behavioural traits:`, `Operating beliefs:` and `Priorities:` lines from a boardroom persona, and the persona's sourced `awareness` facts (as in `bankml.persona`) under `What I know about myself:`.
 3. The memory block: the newest notes first, at most 2,400 characters, under bankml's `MEMORY —` header.
 
 Each output is its own thread, so `messages` holds only that output's recent exchanges. From the terminal, `history`, `memory`, `prompt`, `persona` and `model` toggle their windows (add `open` or `close` to be explicit). Each is also an action you can put on the bar or float. Saved layouts (`.profile`) remember which windows are open and where.
