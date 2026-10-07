@@ -7,7 +7,8 @@ import { Button } from './ui/Button';
 import { IconSend, IconTerminal, IconType } from './ui/Icons';
 import { ActionBar } from './ActionBar';
 import { ResizeCorners } from './ResizeCorners';
-import { UIFProvider, useOptionalUIF, useUIF } from './UIFContext';
+import { HUB_KEY, UIFProvider, useOptionalUIF, useUIF } from './UIFContext';
+import { loadJSON, saveJSON } from '../core/storage';
 import '../styles/UltimateInputField.css';
 
 interface LogLine {
@@ -17,6 +18,16 @@ interface LogLine {
 }
 
 const MAX_LOG = 300;
+
+/** What the field remembers across reloads. */
+interface HubState {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  mode: UIFMode;
+  docked: DockEdge | null;
+}
 
 function isAsyncIterable(v: unknown): v is AsyncIterable<string> {
   return !!v && typeof (v as AsyncIterable<string>)[Symbol.asyncIterator] === 'function';
@@ -64,7 +75,9 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
   right,
 }) => {
   const uif = useUIF();
-  const { registry, outputs, strings, setStrings, hubRef, requestScreens } = uif;
+  const { registry, outputs, strings, setStrings, hubRef, requestScreens, storageKey, raise, zIndexOf } = uif;
+  const hubKey = `uif:${storageKey}:hub`;
+  const [saved] = useState(() => loadJSON<Partial<HubState>>(hubKey, {}));
 
   const [innerValue, setInnerValue] = useState('');
   const value = controlledValue ?? innerValue;
@@ -76,8 +89,8 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
     [controlledValue, onChange],
   );
 
-  const [mode, setModeState] = useState<UIFMode>(initialMode === 'text' ? 'chat' : initialMode);
-  const [docked, setDocked] = useState<DockEdge | null>(null);
+  const [mode, setModeState] = useState<UIFMode>(saved.mode ?? (initialMode === 'text' ? 'chat' : initialMode));
+  const [docked, setDocked] = useState<DockEdge | null>(saved.docked ?? null);
   const [isGlowing, setIsGlowing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<LogLine[]>([]);
@@ -88,12 +101,15 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
   const logRef = useRef<HTMLDivElement>(null);
   const logSeq = useRef(0);
 
-  const { position, size, setPosition, isDragging, startDrag, startResize } = useDragResize({
-    initialPosition: initialPosition ?? {
-      x: window.innerWidth / 2 - initialSize.width / 2,
-      y: window.innerHeight / 2 - initialSize.height / 2,
-    },
-    initialSize,
+  const { position, size, setPosition, isDragging, isResizing, startDrag, startResize } = useDragResize({
+    initialPosition:
+      saved.x !== undefined && saved.y !== undefined
+        ? { x: saved.x, y: saved.y }
+        : initialPosition ?? {
+            x: window.innerWidth / 2 - initialSize.width / 2,
+            y: window.innerHeight / 2 - initialSize.height / 2,
+          },
+    initialSize: saved.width && saved.height ? { width: saved.width, height: saved.height } : initialSize,
     minWidth,
     maxWidth,
     minHeight,
@@ -101,6 +117,12 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
     draggable: draggable && !docked,
     resizable,
   });
+
+  // Remember where the field is and how it is set up. Skipped while a gesture is in progress.
+  useEffect(() => {
+    if (isDragging || isResizing) return;
+    saveJSON(hubKey, { x: position.x, y: position.y, width: size.width, height: size.height, mode, docked } satisfies HubState);
+  }, [hubKey, position, size, mode, docked, isDragging, isResizing]);
 
   // Actions passed as props join the shared registry while this field is mounted.
   useEffect(() => {
@@ -160,8 +182,17 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
   const send = useCallback(
     async (text: string) => {
       if (!text.trim()) return;
-      let id = outputs.resolve(undefined);
-      if (!id) id = outputs.spawn();
+      // "@notes hello" goes to the output called notes, which is opened if it does not exist yet.
+      const routed = /^@(\S+)\s+([\s\S]+)$/.exec(text);
+      let id: string | undefined;
+      if (routed) {
+        text = routed[2];
+        id = outputs.resolve(routed[1]) ?? outputs.spawn(routed[1]);
+        outputs.setActive(id);
+        raise(id);
+      } else {
+        id = outputs.resolve(undefined) ?? outputs.spawn();
+      }
       outputs.append(id, { role: 'user', text });
       triggerGlow();
       const result = onSend?.(text, { outputId: id });
@@ -190,7 +221,7 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
         setBusy(false);
       }
     },
-    [onSend, outputs, triggerGlow],
+    [onSend, outputs, raise, triggerGlow],
   );
 
   // runCommand and runAction call each other (custom actions run command lines).
@@ -303,7 +334,8 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
     <div
       ref={setHub}
       className={containerClasses}
-      style={{ ...dockStyle, width: size.width, height: size.height, minWidth, maxWidth, minHeight }}
+      style={{ ...dockStyle, width: size.width, height: size.height, minWidth, maxWidth, minHeight, zIndex: zIndexOf(HUB_KEY) }}
+      onPointerDownCapture={() => raise(HUB_KEY)}
     >
       {terminal && (
         <div className="uif-termlog" ref={logRef} role="log" aria-live="polite">
@@ -332,7 +364,7 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
               value={value}
               onChange={e => setValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={placeholder || (terminal ? 'Enter command… (help)' : 'Type a message…  (/command runs an action)')}
+              placeholder={placeholder || (terminal ? 'Enter command… (help)' : 'Message…  @output to target · /command to run')}
               disabled={disabled}
               spellCheck={!terminal}
               className={`ultimate-textarea ${terminal ? 'terminal-mode' : 'text-mode'} ${isDragging ? 'pointer-events-none' : ''}`}

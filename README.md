@@ -189,6 +189,13 @@ An action's `run(ctx)` receives `ctx.args` and the controls: `print`, `send`, `r
 
 `[output]` can be an id, a 1-based index or a title, and defaults to the active output. A command that matches no action goes to `onCommand(name, args, ctx)`.
 
+### Layout behaviour
+
+- Clicking a panel (the input field or an output) brings it to the front.
+- The input field remembers its position, size, mode and dock edge in `localStorage` under `storageKey`. The outputs (with their history) and the strings toggle are remembered too.
+- When the window shrinks, panels that fall outside it are pulled back within reach.
+- Clicking outside the bar closes the **+** menu and ends arrange mode.
+
 ### Outputs on other monitors
 
 A pop-out is a real browser window that you can drag to any monitor. It stays in sync with the hub through a `BroadcastChannel`. After you run `screens` and grant window-management permission (Chromium), new pop-outs open on the next screen.
@@ -289,7 +296,7 @@ The component automatically supports dark mode when the `.dark` class is applied
 - Maintains functionality while docked
 
 ### Modes
-- **Chat mode**: Enter sends the text; the reply goes into the active output field
+- **Chat mode**: Enter sends the text; the reply goes into the active output field. Start a message with `@name` (for example `@notes remember this`) to send it to that output, which is opened first if it doesn't exist
 - **T terminal mode**: Enter runs a command and prints the result to a log above the field; ↑/↓ step through the history
 - Switch with the **T** button or the `mode` command
 

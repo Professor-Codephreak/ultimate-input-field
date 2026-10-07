@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Action, ActionRegistry } from '../core/actions';
 import { usePressHoldDrag } from '../hooks/usePressHoldDrag';
@@ -29,6 +29,18 @@ export function ActionBar({ registry, onRun, pressed = {} }: ActionBarProps) {
       if (action) registry.hide(action.id);
     },
   });
+
+  // A press outside the bar closes the palette and ends arranging.
+  useEffect(() => {
+    if (!paletteOpen && !arranging) return;
+    const onDown = (e: PointerEvent) => {
+      if (containerRef.current?.contains(e.target as Node)) return;
+      setPaletteOpen(false);
+      setArranging(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [paletteOpen, arranging, setArranging]);
 
   const items: React.ReactNode[] = actions.map((action, index) => (
     <button

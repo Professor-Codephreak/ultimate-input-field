@@ -529,7 +529,7 @@
   color: #e5e7eb;
   font: 0.875rem/1.45 system-ui, -apple-system, sans-serif;
 }
-.uif-output.is-active { z-index: 991; box-shadow: 0 0 0 1px var(--uif-color), 0 10px 25px rgba(0, 0, 0, 0.35); }
+.uif-output.is-active { box-shadow: 0 0 0 1px var(--uif-color), 0 10px 25px rgba(0, 0, 0, 0.35); }
 .uif-output.is-dragging { opacity: 0.9; }
 
 .uif-output-window {

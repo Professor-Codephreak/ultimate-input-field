@@ -45,7 +45,15 @@ export interface UIFContextValue {
   setRect(id: string, rect: Rect): void;
   requestScreens(): Promise<string>;
   bus: Bus;
+  storageKey: string;
+  /** Bring a panel to the front: an output id, or HUB_KEY for the input field. */
+  raise(key: string): void;
+  /** Stacking order for a panel; the most recently raised panel is on top. */
+  zIndexOf(key: string): number;
 }
+
+export const HUB_KEY = '__hub';
+const Z_BASE = 1000;
 
 const UIFContext = createContext<UIFContextValue | null>(null);
 
@@ -117,6 +125,13 @@ export function UIFProvider({
   );
 
   const [flashes, setFlashes] = useState<Record<string, number>>({});
+  // Last entry is the top panel. Outputs restored from storage start below the hub.
+  const [zOrder, setZOrder] = useState<string[]>(() => [...fields.map(f => f.id), HUB_KEY]);
+  const raise = useCallback(
+    (key: string) => setZOrder(prev => (prev[prev.length - 1] === key ? prev : [...prev.filter(k => k !== key), key])),
+    [],
+  );
+  const zIndexOf = useCallback((key: string) => Z_BASE + Math.max(0, zOrder.indexOf(key)), [zOrder]);
   const hubRef = useRef<HTMLElement | null>(null);
   const windows = useRef(new Map<string, Window>());
   const screens = useRef<ScreenDetails | null>(null);
@@ -182,6 +197,7 @@ export function UIFProvider({
         ]);
         setActiveId(id);
         activeRef.current = id;
+        raise(id);
         return id;
       },
       close(id) {
@@ -189,6 +205,7 @@ export function UIFProvider({
         windows.current.get(id)?.close();
         windows.current.delete(id);
         commit(prev => prev.filter(f => f.id !== id));
+        setZOrder(prev => prev.filter(k => k !== id));
         if (activeRef.current === id) {
           const rest = fieldsRef.current;
           setActiveId(rest[rest.length - 1]?.id ?? null);
@@ -246,7 +263,7 @@ export function UIFProvider({
         return (list.find(f => f.id === ref) ?? list.find(f => f.title.toLowerCase() === lower))?.id;
       },
     }),
-    [bus, callHome, commit, patch, popoutUrl, slotBeside, storageKey],
+    [bus, callHome, commit, patch, popoutUrl, raise, slotBeside, storageKey],
   );
 
   const setRect = useCallback((id: string, rect: Rect) => patch(id, f => ({ ...f, rect })), [patch]);
@@ -343,8 +360,22 @@ export function UIFProvider({
   }, [bus, callHome, outputs, patch]);
 
   const value = useMemo<UIFContextValue>(
-    () => ({ registry, outputs, fields, strings, setStrings, hubRef, flashes, setRect, requestScreens, bus }),
-    [registry, outputs, fields, strings, setStrings, flashes, setRect, requestScreens, bus],
+    () => ({
+      registry,
+      outputs,
+      fields,
+      strings,
+      setStrings,
+      hubRef,
+      flashes,
+      setRect,
+      requestScreens,
+      bus,
+      storageKey,
+      raise,
+      zIndexOf,
+    }),
+    [registry, outputs, fields, strings, setStrings, flashes, setRect, requestScreens, bus, storageKey, raise, zIndexOf],
   );
 
   return (
