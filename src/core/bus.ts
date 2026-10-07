@@ -11,7 +11,8 @@ export type BusMessage =
   | { type: 'out:request-home'; id: string }
   | { type: 'out:request-close'; id: string }
   | { type: 'out:request-rename'; id: string; title: string }
-  | { type: 'out:input'; id: string; text: string };
+  | { type: 'out:input'; id: string; text: string }
+  | { type: 'out:remember'; id: string; text: string };
 
 export interface Bus {
   post(msg: BusMessage): void;

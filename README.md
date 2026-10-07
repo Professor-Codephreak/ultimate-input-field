@@ -165,9 +165,76 @@ Modules (and anything else inside `UltimateBar`) can reach the shared state with
 ### Actions
 
 - **Run** an action by tapping its button, or by typing its `command` (or an alias) in T mode. In chat mode, start the line with `/`.
-- **Rearrange**: press and hold a button (400 ms) to enter arrange mode, then drag it to a new slot. Drag a button off the bar to hide it, and press **Done** or Esc to finish. From the keyboard, choose **+ → Arrange…**, then use the arrow keys to move a button and Delete to hide it.
-- **Add**: **+** lists the hidden actions, and lets you make a custom action that runs commands (`spawn logs; strings on`) or sends text.
-- The order, the hidden actions and the custom actions are saved in `localStorage` under `storageKey`.
+- **Move a button anywhere**: press and hold a button (400 ms), then drag it.
+  - Drop it in another slot on the bar to reorder.
+  - Drop it **anywhere on the screen** and it stays there as a floating button. Tap it to run it, and hold it again to move it.
+  - Drop a floating button back on the bar (the bar highlights) to put it in that slot.
+  - Drop any button on the **trash** that appears at the top of the screen while you drag, to hide it.
+- **Keyboard**: choose **+ → Actions → Arrange…**, then use the arrow keys to move a bar button and Delete to hide it. A focused floating button moves with the arrow keys (hold Shift for larger steps); Home puts it back on the bar and Delete hides it.
+- **Add**: **+ → Actions** lists the hidden actions. **+ → New** makes a custom action that runs commands (`spawn logs; strings on`) or sends text.
+- Everything is saved in `localStorage` under `storageKey`: the order, the floating positions, the hidden actions and the custom actions.
+
+### Context windows: `.history` `.memory` `.prompt` `.persona` `.model`
+
+The **▤** button on the field opens five windows. Each is a panel on the drag/resize template: move it by the title bar, resize it from any corner, press it to bring it to the front, and Tab to its title bar to move it with the arrow keys. Each window imports (⤒) and exports (⤓) its file. The file formats match bankml's Savante UI and mindX, so the files move between them unchanged.
+
+| Window | File format | What it holds |
+|---|---|---|
+| `.history` | JSONL, one exchange per line: `{ts, session, output, output_id, user, assistant, prompt, model}` (extra fields are kept) | Every finished exchange, searchable. Shows the Merkle commitment. |
+| `.memory` | JSONL: `{ts, at, text, sha256, source: {kind: "typed"\|"response"}}` | Notes sent with every message. Add them here, with `remember <text>`, or with ◈ on any reply. |
+| `.prompt` | Plain text | The system prompt. You also choose whether the persona's own `system_prompt` takes precedence, and can preview exactly what the model receives. |
+| `.persona` | JSON: mindX `.persona` v1 (`system_prompt`, …) or the boardroom shape (`role`, `behavioral_traits`, `beliefs`, `desires`) | Who the model speaks as. The JSON is validated before it is applied. |
+| `.model` | YAML: `model_facet`, `task_class`, `logical_model`, `pinned` (other keys and comments are kept) | Which model answers. A form edits the fields without losing comments. |
+
+`.history` and `.memory` show bankml's commitment: the record count and an RFC 6962 Merkle root (`rfc6962-sha256`, leaf = sha256(0x00 ‖ line)). Imported lines are kept byte for byte, so a file exported from here has the same root bankml computes. Clearing either file asks for a second click. No browser dialog is used.
+
+**What reaches your model.** Every chat message passes `meta.context` to `onSend`:
+
+```ts
+onSend={async function* (text, { outputId, context }) {
+  // context.messages: [system, …this output's last 12 exchanges…, the new message], ready for a chat API
+  // context.system:   .prompt (or the persona's system_prompt) + persona lines + the MEMORY block
+  // context.model:    the parsed .model, e.g. { logical_model: 'qwen3-8b', task_class: 'reasoning' }
+  // also: context.persona, context.memory, context.history, context.promptSource, context.modelText
+  yield* callYourModel(context.model, context.messages);
+}}
+```
+
+The system prompt is assembled the way bankml and the mindX boardroom do it:
+1. The persona's `system_prompt`, or the `.prompt`.
+2. `Behavioural traits:`, `Operating beliefs:` and `Priorities:` lines from a boardroom persona.
+3. The memory block: the newest notes first, at most 2,400 characters, under bankml's `MEMORY —` header.
+
+Each output is its own thread, so `messages` holds only that output's recent exchanges. From the terminal, `history`, `memory`, `prompt`, `persona` and `model` toggle their windows (add `open` or `close` to be explicit). Each is also an action you can put on the bar or float. Saved layouts (`.profile`) remember which windows are open and where.
+
+### Layout profiles (`.profile`)
+
+A profile is a named layout. It holds the bar's order, the floating buttons, the custom and hidden buttons, the field's position, size, mode and dock edge, and the strings toggle. It does not include output panels or their messages.
+
+- **+ → Layout** lists the saved layouts. From there you can:
+  - click a layout to apply it
+  - download one as `<name>.profile` (⤓)
+  - delete one (✕)
+  - save the current layout under a name
+  - import a `.profile` file
+  - export the current layout
+  - **Reset** to the standard layout.
+- **Reset** puts every button back in its standard place and clears the floating buttons. It also centres the field in chat mode and sets the strings back to their default. Your custom buttons stay in **+ → Actions** (they are not deleted), and saved layouts are kept.
+- From the terminal: `profile list`, `profile save <name>`, `profile load <name>`, `profile delete <name>`, `profile export [name]`, and `reset`. `profile <name>` is short for `profile load <name>`. The name `standard` is reserved for the built-in layout.
+- Code can use the same API: `useUIF().layout` (or `ctx.layout` in an action) has `save`, `load`, `remove`, `reset`, `list`, `capture`, `exportProfile` and `importProfile`.
+
+A `.profile` file is JSON. Imported files are validated, and a malformed one is refused with the reason:
+
+```json
+{
+  "uif.profile": 1,
+  "name": "work",
+  "savedAt": "2026-10-06T18:00:00.000Z",
+  "actions": { "order": ["strings", "home"], "hidden": ["help"], "custom": [], "floating": { "spawn": { "x": 1082, "y": 142 } } },
+  "hub": { "x": 380, "y": 385, "width": 640, "height": 130, "mode": "chat", "docked": null },
+  "strings": false
+}
+```
 
 An action's `run(ctx)` receives `ctx.args` and the controls: `print`, `send`, `runCommand`, `setMode`, `dock`, `setStrings`, `outputs` (`spawn`, `close`, `popOut`, `callHome`, `ping`, `append`, `update`, `resolve`, …) and `registry`.
 
@@ -181,6 +248,10 @@ An action's `run(ctx)` receives `ctx.args` and the controls: `print`, `send`, `r
 | `popout [output]` | Move an output into its own window |
 | `home [output\|all]` | Close the pop-outs and bring the outputs back beside the field |
 | `ping [output]` | Flash an output (and focus its window) |
+| `profile [list\|save\|load\|delete\|export] [name]` | Saved layouts (`.profile` files) |
+| `reset` | Back to the standard layout (saved layouts are kept) |
+| `history`, `memory`, `prompt`, `persona`, `model` `[open\|close]` | Toggle a context window |
+| `remember <text>` | Add a note to `.memory` |
 | `strings [on\|off]` | Toggle the tethers and beacons |
 | `close [output]`, `clear [output]` | Close an output, or clear the log or an output |
 | `rename <output> <title>` | Rename an output |
@@ -219,7 +290,7 @@ The field and output panels are built from three exported pieces, and you can us
 |---|---|
 | `useDragResize(options)` | Moving a panel and resizing it from all four corners. The opposite corner stays fixed, resizing stops at the edge of the window, a dragged panel always stays grabbable, and panels are pulled back on screen when the window shrinks. `onCommit` runs once at the end of each move or resize. `onHandleKeyDown` adds keyboard control to a focusable handle: arrow keys move, Alt+arrow keys resize, and Shift makes the steps larger. |
 | `<ResizeCorners onStart={startResize} />` | Corner grips that appear on hover. On touch screens they stay visible and are bigger. |
-| `usePressHoldDrag(options)` | Hold (400 ms) to rearrange, drag to reorder, drag off to remove. Arrow keys, Delete and Esc do the same from the keyboard. |
+| `usePressHoldDrag(options)` | Hold (400 ms) to rearrange, drag to reorder, drag off to remove. Arrow keys, Delete and Esc do the same from the keyboard. Pass `onDropOutside(index, at)` to place an item where it was dropped instead of removing it. Any element marked `data-uif-trash` is a drop target that removes the item. |
 
 ### A draggable, resizable panel
 
@@ -311,7 +382,7 @@ export function Tiles() {
 |------|------|---------|-------------|
 | `value` | `string` | - | Controlled value; omit it to let the field manage its own text |
 | `onChange` | `(value: string) => void` | - | Called when the value changes |
-| `onSend` | `(text, { outputId }) => void \| string \| Promise<string> \| AsyncIterable<string>` | - | Chat-mode send; a returned value is written or streamed into the active output |
+| `onSend` | `(text, { outputId, context }) => void \| string \| Promise<string> \| AsyncIterable<string>` | - | Chat-mode send. `context` carries the system prompt, ready-made `messages`, persona, memory and model. A returned value is written or streamed into the output. |
 | `onCommand` | `(name, args, ctx) => string \| void` | - | Handles terminal commands that match no action |
 | `onAction` | `(action, args) => void` | - | Called after any action runs |
 | `onModeChange` | `(mode) => void` | - | Called when the mode changes between chat and terminal |

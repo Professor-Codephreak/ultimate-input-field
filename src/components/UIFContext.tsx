@@ -8,13 +8,18 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react';
-import type { OutputField, OutputMessage, OutputsApi, Rect, UIFProviderOptions } from '../types';
+import type { HubLayoutHandle, LayoutApi, OutputField, OutputMessage, OutputsApi, Rect, UIFProviderOptions } from '../types';
 import { createActionRegistry, type Action, type ActionRegistry } from '../core/actions';
 import { builtinActions } from '../core/builtins';
 import { createBus, KEY_PARAM, OUTPUT_PARAM, type Bus } from '../core/bus';
 import { loadJSON, saveJSON } from '../core/storage';
+import { parseProfile, profileFileName, serializeProfile, STANDARD_PROFILE, type UIFProfile } from '../core/profile';
 import { OutputField as OutputPanel } from './OutputField';
 import { Tethers } from './Tethers';
+import { CONTEXT_KINDS, type ContextKind } from '../core/windows';
+import { ContextWindows } from './ContextWindows';
+import { useContextStore, type ContextApi } from './contextStore';
+import { WINDOW_SIZE } from './ContextWindow';
 
 const COLORS = ['#22d3ee', '#f472b6', '#a3e635', '#fbbf24', '#a78bfa', '#fb923c'];
 const OUTPUT_SIZE = { width: 360, height: 240 };
@@ -54,6 +59,22 @@ export interface UIFContextValue {
   sendTo(text: string, outputId: string): void;
   /** The input field registers how chat messages are sent; returns an unregister function. */
   registerSender(fn: (text: string, outputId: string) => void): () => void;
+  layout: LayoutApi;
+  /** The context windows (.history, .memory, .prompt, .persona, .model). */
+  windows: WindowsApi;
+  /** The content of those five context files. */
+  context: ContextApi;
+  /** The input field registers its layout so profiles can read and apply it. */
+  registerHubLayout(handle: HubLayoutHandle): () => void;
+}
+
+export interface WindowsApi {
+  open: Partial<Record<ContextKind, Rect>>;
+  isOpen(kind: ContextKind): boolean;
+  show(kind: ContextKind): void;
+  hide(kind: ContextKind): void;
+  toggle(kind: ContextKind): void;
+  setRect(kind: ContextKind, rect: Rect): void;
 }
 
 export const HUB_KEY = '__hub';
@@ -291,6 +312,195 @@ export function UIFProvider({
     [outputs],
   );
 
+  // ---- Context windows ------------------------------------------------------
+  const contextStore = useContextStore(storageKey);
+  const [openWindows, setOpenWindows] = useState<Partial<Record<ContextKind, Rect>>>(() => {
+    const saved = loadJSON<Partial<Record<string, Rect>>>(`uif:${storageKey}:windows`, {});
+    return Object.fromEntries(Object.entries(saved).filter(([k]) => (CONTEXT_KINDS as readonly string[]).includes(k)));
+  });
+  useEffect(() => saveJSON(`uif:${storageKey}:windows`, openWindows), [openWindows, storageKey]);
+  const openWindowsRef = useRef(openWindows);
+  openWindowsRef.current = openWindows;
+  /**
+   * Where a window opens: the first free cell of a grid over the viewport, so a
+   * new window does not cover the open ones. When every cell is taken, it cascades.
+   */
+  const windowSlot = useCallback((taken: Rect[]): Rect => {
+    const { width, height } = WINDOW_SIZE;
+    const gap = 12;
+    const cols = Math.max(1, Math.floor((window.innerWidth - gap) / (width + gap)));
+    const rows = Math.max(1, Math.floor((window.innerHeight - gap) / (height + gap)));
+    const overlaps = (r: Rect) =>
+      taken.some(t => r.x < t.x + t.width && t.x < r.x + r.width && r.y < t.y + t.height && t.y < r.y + r.height);
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const cell = { x: gap + col * (width + gap), y: gap + row * (height + gap), width, height };
+        if (!overlaps(cell)) return cell;
+      }
+    }
+    const n = taken.length;
+    return {
+      x: Math.min(gap + n * 32, window.innerWidth - width - gap),
+      y: Math.min(gap + n * 32, window.innerHeight - height - gap),
+      width,
+      height,
+    };
+  }, []);
+  const contextWindows = useMemo<WindowsApi>(
+    () => ({
+      open: openWindows,
+      isOpen: kind => !!openWindows[kind],
+      // Opening (or re-showing) a window brings it to the front; restoring after a reload does not.
+      show: kind => {
+        raise(`win:${kind}`);
+        setOpenWindows(prev => (prev[kind] ? prev : { ...prev, [kind]: windowSlot(Object.values(prev) as Rect[]) }));
+      },
+      hide: kind =>
+        setOpenWindows(prev => {
+          if (!prev[kind]) return prev;
+          const next = { ...prev };
+          delete next[kind];
+          return next;
+        }),
+      toggle: kind => {
+        if (!openWindows[kind]) raise(`win:${kind}`);
+        setOpenWindows(prev => {
+          if (prev[kind]) {
+            const next = { ...prev };
+            delete next[kind];
+            return next;
+          }
+          return { ...prev, [kind]: windowSlot(Object.values(prev) as Rect[]) };
+        });
+      },
+      setRect: (kind, rect) => setOpenWindows(prev => (prev[kind] ? { ...prev, [kind]: rect } : prev)),
+    }),
+    [openWindows, raise, windowSlot],
+  );
+
+  // ---- Layout profiles (.profile) -------------------------------------------
+  const hubLayout = useRef<HubLayoutHandle | null>(null);
+  const registerHubLayout = useCallback((handle: HubLayoutHandle) => {
+    hubLayout.current = handle;
+    return () => {
+      if (hubLayout.current === handle) hubLayout.current = null;
+    };
+  }, []);
+  const [profiles, setProfiles] = useState<Record<string, UIFProfile>>(() =>
+    loadJSON(`uif:${storageKey}:profiles`, {}),
+  );
+  const [activeProfile, setActiveProfile] = useState<string | null>(() =>
+    loadJSON(`uif:${storageKey}:profile`, null),
+  );
+  const profilesRef = useRef(profiles);
+  profilesRef.current = profiles;
+  const stringsRef = useRef(strings);
+  stringsRef.current = strings;
+
+  const storeProfiles = useCallback(
+    (next: Record<string, UIFProfile>) => {
+      profilesRef.current = next;
+      setProfiles(next);
+      saveJSON(`uif:${storageKey}:profiles`, next);
+    },
+    [storageKey],
+  );
+  const markActive = useCallback(
+    (name: string | null) => {
+      setActiveProfile(name);
+      saveJSON(`uif:${storageKey}:profile`, name);
+    },
+    [storageKey],
+  );
+
+  const layout = useMemo<LayoutApi>(() => {
+    const capture = (name: string): UIFProfile => ({
+      'uif.profile': 1,
+      name,
+      savedAt: new Date().toISOString(),
+      actions: registry.snapshot(),
+      hub: hubLayout.current?.get() ?? { x: 0, y: 0, width: 600, height: 120, mode: 'chat', docked: null },
+      strings: stringsRef.current,
+      windows: openWindowsRef.current,
+    });
+    const apply = (p: UIFProfile) => {
+      registry.restore(p.actions);
+      hubLayout.current?.set(p.hub);
+      setStrings(p.strings);
+      setOpenWindows(p.windows ?? {});
+    };
+    const reset = () => {
+      registry.reset();
+      hubLayout.current?.set(null);
+      setStrings(defaultStrings);
+      setOpenWindows({});
+      markActive(STANDARD_PROFILE);
+    };
+    const download = (p: UIFProfile) => {
+      const url = URL.createObjectURL(new Blob([serializeProfile(p)], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = profileFileName(p.name);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    return {
+      list: () => Object.keys(profilesRef.current).sort(),
+      active: activeProfile,
+      capture,
+      save(name) {
+        const clean = name.trim();
+        if (!clean || clean === STANDARD_PROFILE) throw new Error(`"${STANDARD_PROFILE}" is the built-in layout; pick another name`);
+        const p = capture(clean);
+        storeProfiles({ ...profilesRef.current, [clean]: p });
+        markActive(clean);
+        return p;
+      },
+      load(name) {
+        if (name === STANDARD_PROFILE) {
+          reset();
+          return true;
+        }
+        const p = profilesRef.current[name];
+        if (!p) return false;
+        apply(p);
+        markActive(name);
+        return true;
+      },
+      remove(name) {
+        if (!profilesRef.current[name]) return false;
+        const { [name]: _gone, ...rest } = profilesRef.current;
+        storeProfiles(rest);
+        if (activeProfile === name) markActive(null);
+        return true;
+      },
+      reset,
+      exportProfile(name) {
+        const saved = name ? profilesRef.current[name] : undefined;
+        if (name && !saved && name !== activeProfile) throw new Error(`no profile "${name}"`);
+        download(saved ?? capture(name ?? activeProfile ?? 'layout'));
+      },
+      importProfile(text, fileName) {
+        let data: unknown;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          throw new Error('not a valid .profile file: it is not JSON');
+        }
+        const fallback = fileName?.replace(/\.profile$|\.json$/i, '') || 'imported';
+        const p = parseProfile(data, fallback);
+        const name = p.name === STANDARD_PROFILE ? `${STANDARD_PROFILE}-imported` : p.name;
+        const stored = { ...p, name };
+        storeProfiles({ ...profilesRef.current, [name]: stored });
+        apply(stored);
+        markActive(name);
+        return name;
+      },
+    };
+  }, [activeProfile, defaultStrings, markActive, registry, setStrings, storeProfiles]);
+
   const setRect = useCallback((id: string, rect: Rect) => patch(id, f => ({ ...f, rect })), [patch]);
 
   const requestScreens = useCallback(async () => {
@@ -375,6 +585,9 @@ export function UIFProvider({
         case 'out:input':
           sendTo(msg.text, msg.id);
           break;
+        case 'out:remember':
+          void contextStore.remember(msg.text, 'response');
+          break;
       }
     });
     // After a reload, pop-outs that are still open answer this; the rest come home.
@@ -388,7 +601,7 @@ export function UIFProvider({
       off();
       clearTimeout(t);
     };
-  }, [bus, callHome, outputs, patch, sendTo]);
+  }, [bus, callHome, outputs, patch, sendTo, contextStore]);
 
   const value = useMemo<UIFContextValue>(
     () => ({
@@ -407,6 +620,10 @@ export function UIFProvider({
       zIndexOf,
       sendTo,
       registerSender,
+      layout,
+      windows: contextWindows,
+      context: contextStore,
+      registerHubLayout,
     }),
     [
       registry,
@@ -423,6 +640,10 @@ export function UIFProvider({
       zIndexOf,
       sendTo,
       registerSender,
+      layout,
+      contextWindows,
+      contextStore,
+      registerHubLayout,
     ],
   );
 
@@ -434,6 +655,7 @@ export function UIFProvider({
         .map(f => (
           <OutputPanel key={f.id} field={f} />
         ))}
+      <ContextWindows />
       {strings && <Tethers />}
     </UIFContext.Provider>
   );

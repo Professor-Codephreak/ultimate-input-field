@@ -7,8 +7,12 @@ import { Button } from './ui/Button';
 import { IconSend, IconTerminal, IconType } from './ui/Icons';
 import { ActionBar } from './ActionBar';
 import { ResizeCorners } from './ResizeCorners';
+import { WindowsMenu } from './WindowsMenu';
 import { HUB_KEY, UIFProvider, useOptionalUIF, useUIF } from './UIFContext';
 import { loadJSON, saveJSON } from '../core/storage';
+import type { HubLayout } from '../core/profile';
+import { modelLabel } from '../core/context';
+import { CONTEXT_KINDS } from '../core/windows';
 import '../styles/UltimateInputField.css';
 
 interface LogLine {
@@ -19,15 +23,6 @@ interface LogLine {
 
 const MAX_LOG = 300;
 
-/** What the field remembers across reloads. */
-interface HubState {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  mode: UIFMode;
-  docked: DockEdge | null;
-}
 
 function isAsyncIterable(v: unknown): v is AsyncIterable<string> {
   return !!v && typeof (v as AsyncIterable<string>)[Symbol.asyncIterator] === 'function';
@@ -75,9 +70,23 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
   right,
 }) => {
   const uif = useUIF();
-  const { registry, outputs, strings, setStrings, hubRef, requestScreens, storageKey, raise, zIndexOf, registerSender } = uif;
+  const {
+    registry,
+    outputs,
+    strings,
+    setStrings,
+    hubRef,
+    requestScreens,
+    storageKey,
+    raise,
+    zIndexOf,
+    registerSender,
+    layout,
+    registerHubLayout,
+    context: contextStore,
+  } = uif;
   const hubKey = `uif:${storageKey}:hub`;
-  const [saved] = useState(() => loadJSON<Partial<HubState>>(hubKey, {}));
+  const [saved] = useState(() => loadJSON<Partial<HubLayout>>(hubKey, {}));
 
   const [innerValue, setInnerValue] = useState('');
   const value = controlledValue ?? innerValue;
@@ -101,7 +110,7 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
   const logRef = useRef<HTMLDivElement>(null);
   const logSeq = useRef(0);
 
-  const { position, size, setPosition, isDragging, isResizing, startDrag, startResize, onHandleKeyDown } = useDragResize({
+  const { position, size, setPosition, setSize, isDragging, isResizing, startDrag, startResize, onHandleKeyDown } = useDragResize({
     initialPosition:
       saved.x !== undefined && saved.y !== undefined
         ? { x: saved.x, y: saved.y }
@@ -121,7 +130,7 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
   // Remember where the field is and how it is set up. Skipped while a gesture is in progress.
   useEffect(() => {
     if (isDragging || isResizing) return;
-    saveJSON(hubKey, { x: position.x, y: position.y, width: size.width, height: size.height, mode, docked } satisfies HubState);
+    saveJSON(hubKey, { x: position.x, y: position.y, width: size.width, height: size.height, mode, docked } satisfies HubLayout);
   }, [hubKey, position, size, mode, docked, isDragging, isResizing]);
 
   // Actions passed as props join the shared registry while this field is mounted.
@@ -197,10 +206,26 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
       }
       outputs.append(id, { role: 'user', text });
       triggerGlow();
-      const result = onSend?.(text, { outputId: id });
+      const context = contextStore.forSend(text, id);
+      const outputId = id;
+      // Each finished exchange goes into .history (bankml's record shape, plus the output it was in).
+      const record = (reply: string) =>
+        reply &&
+        contextStore.appendHistory({
+          ts: Date.now() / 1000,
+          session: storageKey,
+          output: outputs.list().find(f => f.id === outputId)?.title,
+          output_id: outputId,
+          user: text,
+          assistant: reply,
+          prompt: context.promptSource,
+          model: modelLabel(context.model),
+        });
+      const result = onSend?.(text, { outputId: id, context });
       if (result === undefined) return;
       if (typeof result === 'string') {
         outputs.append(id, { role: 'assistant', text: result });
+        record(result);
         return;
       }
       const mid = outputs.append(id, { role: 'assistant', text: '', pending: true });
@@ -213,9 +238,11 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
             outputs.update(id, mid, { text: acc });
           }
           outputs.update(id, mid, { pending: false });
+          record(acc);
         } else {
           const reply = await result;
           outputs.update(id, mid, { text: reply ?? '', pending: false });
+          record(reply ?? '');
         }
       } catch (err) {
         outputs.update(id, mid, { text: `Error: ${(err as Error).message ?? err}`, pending: false });
@@ -223,11 +250,44 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
         setBusy(false);
       }
     },
-    [onSend, outputs, raise, triggerGlow],
+    [onSend, outputs, raise, triggerGlow, contextStore, storageKey],
   );
 
   // Reply boxes on the outputs (in-page and popped out) send through this field.
   useEffect(() => registerSender((text, outputId) => void send(text, outputId)), [registerSender, send]);
+
+  // Profiles read and apply the field's layout through this handle.
+  const hubLive = useRef({ position, size, mode, docked });
+  hubLive.current = { position, size, mode, docked };
+  const standardMode: UIFMode = initialMode === 'text' ? 'chat' : initialMode;
+  useEffect(
+    () =>
+      registerHubLayout({
+        get: () => {
+          const h = hubLive.current;
+          return { ...h.position, ...h.size, mode: h.mode, docked: h.docked };
+        },
+        set: next => {
+          const l = next ?? {
+            ...(initialPosition ?? {
+              x: window.innerWidth / 2 - initialSize.width / 2,
+              y: window.innerHeight / 2 - initialSize.height / 2,
+            }),
+            ...initialSize,
+            mode: standardMode,
+            docked: null,
+          };
+          setSize({ width: l.width, height: l.height });
+          setPosition({
+            x: Math.max(60 - l.width, Math.min(l.x, window.innerWidth - 60)),
+            y: Math.max(0, Math.min(l.y, window.innerHeight - 30)),
+          });
+          setDocked(dockable ? l.docked : null);
+          setMode(l.mode);
+        },
+      }),
+    [registerHubLayout, initialPosition, initialSize, standardMode, setPosition, setSize, setMode, dockable],
+  );
 
   // runCommand and runAction call each other (custom actions run command lines).
   const runCommandRef = useRef<(line: string) => void>(() => {});
@@ -247,9 +307,12 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
       setStrings,
       outputs,
       registry,
+      layout,
+      windows: uif.windows,
+      remember: text => contextStore.remember(text),
       requestScreens: async () => print(await requestScreens()),
     }),
-    [print, send, mode, setMode, docked, dock, strings, setStrings, outputs, registry, requestScreens],
+    [print, send, mode, setMode, docked, dock, strings, setStrings, outputs, registry, layout, uif.windows, contextStore, requestScreens],
   );
 
   const runAction = useCallback(
@@ -396,10 +459,16 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
               >
                 {terminal ? <IconType /> : <IconTerminal />}
               </Button>
+              <WindowsMenu />
               <ActionBar
                 registry={registry}
+                layout={layout}
                 onRun={action => void runAction(action)}
-                pressed={{ strings, dock: !!docked }}
+                pressed={{
+                  strings,
+                  dock: !!docked,
+                  ...Object.fromEntries(CONTEXT_KINDS.map(k => [`win-${k}`, uif.windows.isOpen(k)])),
+                }}
               />
             </div>
             {status && !terminal && <span className={`uif-status is-${status.kind}`}>{status.text}</span>}
