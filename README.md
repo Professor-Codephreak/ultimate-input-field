@@ -204,6 +204,90 @@ A pop-out is a real browser window that you can drag to any monitor. It stays in
 
 With strings on, in-page outputs are tied to the field by coloured curves. Pop-outs get a beacon at the edge of the viewport that points toward their window: click it to flash and focus the window, or double-click it to call the output home.
 
+## 🧩 Build your own panels with the drag/resize template
+
+The field and output panels are built from three exported pieces, and you can use them for any panel or bar of your own.
+
+| Export | What it gives you |
+|---|---|
+| `useDragResize(options)` | Moving a panel and resizing it from all four corners. The opposite corner stays fixed, resizing stops at the edge of the window, a dragged panel always stays grabbable, and panels are pulled back on screen when the window shrinks. `onCommit` runs once at the end of each move or resize. |
+| `<ResizeCorners onStart={startResize} />` | Corner grips that appear on hover. On touch screens they stay visible and are bigger. |
+| `usePressHoldDrag(options)` | Hold (400 ms) to rearrange, drag to reorder, drag off to remove. Arrow keys, Delete and Esc do the same from the keyboard. |
+
+### A draggable, resizable panel
+
+```tsx
+import { useDragResize, ResizeCorners } from 'ultimate-input-field';
+import 'ultimate-input-field/dist/index.css';
+
+export function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+  const { position, size, startDrag, startResize } = useDragResize({
+    initialPosition: { x: 80, y: 80 },
+    initialSize: { width: 320, height: 200 },
+    minWidth: 200,
+    maxWidth: 900,
+    minHeight: 120,
+    maxHeight: 700,
+    onCommit: rect => console.log('saved', rect), // persist here
+  });
+
+  return (
+    // Any positioned element works; the grips anchor to its corners.
+    <div style={{ position: 'fixed', left: position.x, top: position.y, width: size.width, height: size.height }}>
+      <header onPointerDown={startDrag} style={{ cursor: 'move', touchAction: 'none' }}>{title}</header>
+      {children}
+      <ResizeCorners onStart={startResize} />
+    </div>
+  );
+}
+```
+
+The grips show when the panel is hovered if it has the `uif-output` or `ultimate-input-field` class. Otherwise add your own rule, for example `.my-panel:hover > .uif-corner { opacity: 1 }`.
+
+Inside an `UltimateBar` or `UIFProvider`, call `useUIF().raise(id)` on pointer-down and use `zIndexOf(id)` for the panel's `z-index`, so it stacks with the field and the outputs.
+
+### A press-and-hold reorderable list
+
+```tsx
+import { useRef, useState } from 'react';
+import { usePressHoldDrag } from 'ultimate-input-field';
+
+export function Tiles() {
+  const [items, setItems] = useState(['A', 'B', 'C', 'D']);
+  const ref = useRef<HTMLDivElement>(null);
+  const { drag, arranging, onPointerDown, onKeyDown, guardClick } = usePressHoldDrag({
+    containerRef: ref,
+    onReorder: (from, to) =>
+      setItems(list => {
+        const next = [...list];
+        next.splice(to, 0, ...next.splice(from, 1));
+        return next;
+      }),
+    onRemove: index => setItems(list => list.filter((_, i) => i !== index)),
+  });
+
+  return (
+    <div ref={ref} style={{ display: 'flex', gap: 8 }}>
+      {items.map((item, i) => (
+        <button
+          key={item}
+          data-uif-item={i} // required: the hook measures items by this attribute
+          style={{ touchAction: 'none', opacity: drag?.index === i ? 0.3 : 1 }}
+          onPointerDown={e => onPointerDown(e, i)}
+          onKeyDown={e => onKeyDown(e, i, items.length)}
+          onClick={() => guardClick(() => console.log('tapped', item))}
+        >
+          {item}
+        </button>
+      ))}
+      {arranging && <span>drag to move · drag off to remove</span>}
+    </div>
+  );
+}
+```
+
+`drag` holds the pointer position, the grab offset, the drop `target` index, and whether the pointer is `outside` the container. Use it to draw a placeholder and a floating ghost, as `ActionBar` does. Render the ghost in a portal to `document.body`: a `backdrop-filter` or `transform` on an ancestor makes `position: fixed` relative to that ancestor instead of the window.
+
 ## 🎛️ API Reference
 
 ### Props
@@ -347,6 +431,8 @@ src/
 ```
 
 Run `pnpm test` for the unit tests and `pnpm typecheck` to type-check.
+
+For AI agents and crawlers, [`llms.txt`](llms.txt) is a short machine-readable map of the codebase in the [llmstxt.org](https://llmstxt.org/) format. If it and the code disagree, the code wins.
 
 ## 🤝 Contributing
 

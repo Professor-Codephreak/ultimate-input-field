@@ -1,0 +1,56 @@
+# ultimate-input-field
+
+> A React component library. Its centre is one input field (the UIF), which is the hub of a modular UI bar. The field has two modes: chat, where Enter sends text and the reply streams into an output field, and T terminal, where Enter runs a command. Every action button is also a terminal command. Output fields can be spawned, popped out into browser windows on other monitors, found with tether lines and edge beacons ("strings"), and called home. The drag and resize hooks are exported as a template for other panels. Peer dependencies are React 16.8 or later only, with no runtime dependencies. License is MIT.
+
+Authority: the source code on the main branch is the source of truth. Believe the code in src/ over this file if they disagree. The README is the human guide, and this file is the machine summary of it.
+
+Facts a machine needs before changing this code:
+
+- Entry point: src/index.ts. Everything public is exported there.
+- Shared state lives in UIFProvider (src/components/UIFContext.tsx). UltimateBar creates one. A standalone UltimateInputField creates its own.
+- Pop-out windows load the same page with ?uif-output=<id>. The host must render OutputWindow when isOutputWindow() is true.
+- The hub and the pop-out windows talk over a BroadcastChannel named uif:<storageKey>. The hub owns the message history, and pop-outs only mirror it.
+- State is kept in localStorage under uif:<storageKey>:actions, :outputs, :strings and :hub. Every access is wrapped in try/catch.
+- Drag and resize use Pointer Events and document listeners. Do not add a drag library.
+- The drag and resize hooks are the approved template for every draggable or resizable panel. Reuse them instead of writing new pointer logic.
+- A backdrop-filter or transform on an ancestor makes position: fixed relative to that ancestor. Floating elements such as the drag ghost are therefore portaled to document.body.
+- Checks before merging: pnpm typecheck, pnpm test (vitest), pnpm build (tsup).
+
+## Docs
+
+- [README](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/README.md): the human guide. It covers install, usage, the action API, the terminal commands, outputs, strings, the drag template and props.
+- [package.json](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/package.json): scripts, peer dependencies and build outputs (dist/index.js, dist/index.mjs, dist/index.css).
+
+## Public API
+
+- [src/index.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/index.ts): the list of everything exported.
+- [src/types.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/types.ts): props, ActionContext, OutputsApi, OutputField and SendResult types.
+- [UltimateInputField](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/components/UltimateInputField.tsx): the hub. It covers chat and T mode, the send pipeline, command dispatch, docking and its saved layout.
+- [UltimateBar](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/components/UltimateBar.tsx): a provider plus the hub, with left and right module slots.
+- [UIFContext](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/components/UIFContext.tsx): UIFProvider and useUIF. It holds the action registry, the outputs, the strings toggle, the stacking order (raise, zIndexOf) and pop-out placement.
+
+## Drag and resize template
+
+- [useDragResize](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/hooks/useDragResize.ts): move and resize from all four corners. The opposite corner stays fixed and the panel stops at the viewport edge. A dragged panel keeps 60 px on screen. onCommit runs once per gesture.
+- [ResizeCorners](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/components/ResizeCorners.tsx): bracket grips on the four corners. They show on hover, and on touch screens they are always shown and larger.
+- [usePressHoldDrag](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/hooks/usePressHoldDrag.ts): hold for 400 ms to arrange, then drag to reorder or drag off to remove. Items need a data-uif-item attribute. Arrow keys, Delete and Esc do the same from the keyboard.
+- [ActionBar](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/components/ActionBar.tsx): the reference use of usePressHoldDrag, with its placeholder slot, portaled ghost and add palette.
+
+## Actions and commands
+
+- [src/core/actions.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/core/actions.ts): the Action type and createActionRegistry. It handles order, hidden and custom actions, and saves them.
+- [src/core/builtins.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/core/builtins.ts): the built-in actions: spawn, strings, home, dock, popout, close, ping, outputs, screens, mode, clear, actions and help.
+- [src/core/commands.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/core/commands.ts): tokenize and parseCommand. Quotes group words, a leading slash is optional, and aliases match regardless of case.
+
+## Outputs and windows
+
+- [OutputField](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/components/OutputField.tsx): an in-page output panel, plus OutputView, which the pop-out shares.
+- [OutputWindow](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/components/OutputWindow.tsx): the pop-out page. It reports its screen position every 500 ms and closes itself when called home.
+- [src/core/bus.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/core/bus.ts): the BroadcastChannel message types (hub:hello, out:*) and isOutputWindow.
+- [Tethers](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/components/Tethers.tsx): the strings. It draws curves to in-page outputs and edge beacons that point at pop-out windows in screen coordinates.
+
+## Optional
+
+- [src/core/__tests__/core.test.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/core/__tests__/core.test.ts): unit tests for the parser and the registry.
+- [src/App.tsx](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/App.tsx): the demo app, with a streaming echo bot and sample modules.
+- [src/styles/UltimateInputField.css](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/styles/UltimateInputField.css): all styles, using the uif- class prefix.
