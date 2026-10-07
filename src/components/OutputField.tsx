@@ -57,7 +57,7 @@ export function OutputView({ field, active, flash, popped, onHeaderPointerDown, 
 
 /** A floating, draggable output panel inside the hub page. */
 export function OutputField({ field }: { field: OutputFieldData }) {
-  const { outputs, setRect, flashes } = useUIF();
+  const { outputs, setRect, flashes, raise, zIndexOf } = useUIF();
   const { position, size, setPosition, setSize, startDrag, startResize, isDragging } = useDragResize({
     initialPosition: { x: field.rect.x, y: field.rect.y },
     initialSize: { width: field.rect.width, height: field.rect.height },
@@ -79,8 +79,20 @@ export function OutputField({ field }: { field: OutputFieldData }) {
     <div
       className={`uif-output ${active ? 'is-active' : ''} ${isDragging ? 'is-dragging' : ''}`}
       data-uif-output={field.id}
-      style={{ left: position.x, top: position.y, width: size.width, height: size.height, '--uif-color': field.color } as React.CSSProperties}
-      onPointerDown={() => outputs.setActive(field.id)}
+      style={
+        {
+          left: position.x,
+          top: position.y,
+          width: size.width,
+          height: size.height,
+          zIndex: zIndexOf(field.id),
+          '--uif-color': field.color,
+        } as React.CSSProperties
+      }
+      onPointerDownCapture={() => {
+        outputs.setActive(field.id);
+        raise(field.id);
+      }}
     >
       <OutputView
         field={field}

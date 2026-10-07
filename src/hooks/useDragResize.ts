@@ -32,9 +32,18 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 /** Pixels of a dragged panel that always stay inside the viewport. */
 const KEEP_VISIBLE = 60;
 
+/** Pull a position back so the panel can still be grabbed. */
+function keepReachable(p: { x: number; y: number }, width: number) {
+  return {
+    x: clamp(p.x, KEEP_VISIBLE - width, window.innerWidth - KEEP_VISIBLE),
+    y: clamp(p.y, 0, window.innerHeight - KEEP_VISIBLE / 2),
+  };
+}
+
 /** Pointer-driven move and corner resize for a fixed-position panel. */
 export function useDragResize(opts: Options) {
-  const [position, setPosition] = useState(opts.initialPosition);
+  // A saved position may come from a larger window.
+  const [position, setPosition] = useState(() => keepReachable(opts.initialPosition, opts.initialSize.width));
   const [size, setSize] = useState(opts.initialSize);
   const [gesture, setGesture] = useState<Gesture | null>(null);
 
@@ -66,10 +75,7 @@ export function useDragResize(opts: Options) {
       const vh = window.innerHeight;
       if (gesture.kind === 'drag') {
         // Keep enough of the panel on screen to grab it again.
-        setPosition({
-          x: clamp(gesture.x + dx, KEEP_VISIBLE - gesture.width, vw - KEEP_VISIBLE),
-          y: clamp(gesture.y + dy, 0, vh - KEEP_VISIBLE / 2),
-        });
+        setPosition(keepReachable({ x: gesture.x + dx, y: gesture.y + dy }, gesture.width));
         return;
       }
       const { minWidth, maxWidth, minHeight, maxHeight } = live.current.opts;
@@ -98,6 +104,17 @@ export function useDragResize(opts: Options) {
       document.removeEventListener('pointerup', up);
     };
   }, [gesture]);
+
+  // When the window shrinks, bring panels that fell outside it back within reach.
+  useEffect(() => {
+    const onResize = () =>
+      setPosition(p => {
+        const next = keepReachable(p, live.current.size.width);
+        return next.x === p.x && next.y === p.y ? p : next;
+      });
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   return {
     position,
