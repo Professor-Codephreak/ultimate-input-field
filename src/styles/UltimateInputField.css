@@ -1113,3 +1113,5 @@
 @container uif (max-width: 300px) {
   .uif-windows-toggle { width: 1.75rem; }
 }
+
+.uif-msg-silent { font-size: 0.75rem; opacity: 0.7; cursor: help; }

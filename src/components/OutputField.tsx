@@ -130,6 +130,11 @@ export function OutputView({
             <div key={m.id} className={`uif-msg uif-msg-${m.role}`}>
               {m.text}
               {m.pending && <span className="uif-caret">▍</span>}
+              {m.silent && field.speak && (
+                <span className="uif-msg-silent" title="Not read aloud: the engine did not vouch for this reply" aria-label="not read aloud">
+                  {' '}🔇
+                </span>
+              )}
             </div>
           );
           if (!keep) return msg;
