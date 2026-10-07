@@ -61,8 +61,10 @@ export function App() {
   return (
     <div className="demo-page">
       <p className="demo-hint">
-        Hold any action button to rearrange it, or drag it off the bar to hide it. Press <b>T</b> for terminal mode and
-        try <code>spawn notes</code>, <code>strings on</code>, <code>popout notes</code>, <code>home all</code>.
+        Hold any action button, then drag it to a new slot or drop it anywhere on the screen. Drop it on the trash to
+        hide it. <b>+ → Layout</b> saves and loads <code>.profile</code> layouts and resets to the standard one. Press{' '}
+        <b>T</b> for terminal mode and try <code>spawn notes</code>, <code>strings on</code>, <code>popout notes</code>,{' '}
+        <code>home all</code>.
       </p>
       <UltimateBar
         storageKey="demo"

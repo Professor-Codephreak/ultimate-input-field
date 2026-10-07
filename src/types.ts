@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Action, ActionRegistry } from './core/actions';
+import type { HubLayout, UIFProfile } from './core/profile';
 
 export type UIFMode = 'chat' | 'terminal';
 export type DockEdge = 'top' | 'bottom' | 'left' | 'right';
@@ -48,6 +49,33 @@ export interface OutputsApi {
 
 export type LogKind = 'cmd' | 'out' | 'err';
 
+/** Named layouts (`.profile`) and the reset to the standard layout. */
+export interface LayoutApi {
+  /** Saved profile names, sorted. */
+  list(): string[];
+  /** The profile last saved or loaded, or 'standard' after a reset. */
+  active: string | null;
+  /** The current layout as a profile, without saving it. */
+  capture(name: string): UIFProfile;
+  save(name: string): UIFProfile;
+  /** Apply a saved profile; 'standard' resets. Returns false when there is no such profile. */
+  load(name: string): boolean;
+  remove(name: string): boolean;
+  /** Back to the standard layout. Saved profiles are kept. */
+  reset(): void;
+  /** Download a profile as `<name>.profile` (the current layout when no saved name is given). */
+  exportProfile(name?: string): void;
+  /** Read a `.profile` file's text, save it and apply it. Returns its name; throws when the file is invalid. */
+  importProfile(text: string, fileName?: string): string;
+}
+
+/** The input field registers this so profiles can read and set its layout. */
+export interface HubLayoutHandle {
+  get(): HubLayout;
+  /** Apply a layout; null means the standard (default) layout. */
+  set(layout: HubLayout | null): void;
+}
+
 export interface ActionContext {
   args: string[];
   print(text: string, kind?: LogKind): void;
@@ -62,6 +90,7 @@ export interface ActionContext {
   setStrings(on: boolean | 'toggle'): void;
   outputs: OutputsApi;
   registry: ActionRegistry;
+  layout: LayoutApi;
   requestScreens(): Promise<void>;
 }
 

@@ -165,9 +165,43 @@ Modules (and anything else inside `UltimateBar`) can reach the shared state with
 ### Actions
 
 - **Run** an action by tapping its button, or by typing its `command` (or an alias) in T mode. In chat mode, start the line with `/`.
-- **Rearrange**: press and hold a button (400 ms) to enter arrange mode, then drag it to a new slot. Drag a button off the bar to hide it, and press **Done** or Esc to finish. From the keyboard, choose **+ → Arrange…**, then use the arrow keys to move a button and Delete to hide it.
-- **Add**: **+** lists the hidden actions, and lets you make a custom action that runs commands (`spawn logs; strings on`) or sends text.
-- The order, the hidden actions and the custom actions are saved in `localStorage` under `storageKey`.
+- **Move a button anywhere**: press and hold a button (400 ms), then drag it.
+  - Drop it in another slot on the bar to reorder.
+  - Drop it **anywhere on the screen** and it stays there as a floating button. Tap it to run it, and hold it again to move it.
+  - Drop a floating button back on the bar (the bar highlights) to put it in that slot.
+  - Drop any button on the **trash** that appears at the top of the screen while you drag, to hide it.
+- **Keyboard**: choose **+ → Actions → Arrange…**, then use the arrow keys to move a bar button and Delete to hide it. A focused floating button moves with the arrow keys (hold Shift for larger steps); Home puts it back on the bar and Delete hides it.
+- **Add**: **+ → Actions** lists the hidden actions. **+ → New** makes a custom action that runs commands (`spawn logs; strings on`) or sends text.
+- Everything is saved in `localStorage` under `storageKey`: the order, the floating positions, the hidden actions and the custom actions.
+
+### Layout profiles (`.profile`)
+
+A profile is a named layout. It holds the bar's order, the floating buttons, the custom and hidden buttons, the field's position, size, mode and dock edge, and the strings toggle. It does not include output panels or their messages.
+
+- **+ → Layout** lists the saved layouts. From there you can:
+  - click a layout to apply it
+  - download one as `<name>.profile` (⤓)
+  - delete one (✕)
+  - save the current layout under a name
+  - import a `.profile` file
+  - export the current layout
+  - **Reset** to the standard layout.
+- **Reset** puts every button back in its standard place and clears the floating buttons. It also centres the field in chat mode and sets the strings back to their default. Your custom buttons stay in **+ → Actions** (they are not deleted), and saved layouts are kept.
+- From the terminal: `profile list`, `profile save <name>`, `profile load <name>`, `profile delete <name>`, `profile export [name]`, and `reset`. `profile <name>` is short for `profile load <name>`. The name `standard` is reserved for the built-in layout.
+- Code can use the same API: `useUIF().layout` (or `ctx.layout` in an action) has `save`, `load`, `remove`, `reset`, `list`, `capture`, `exportProfile` and `importProfile`.
+
+A `.profile` file is JSON. Imported files are validated, and a malformed one is refused with the reason:
+
+```json
+{
+  "uif.profile": 1,
+  "name": "work",
+  "savedAt": "2026-10-06T18:00:00.000Z",
+  "actions": { "order": ["strings", "home"], "hidden": ["help"], "custom": [], "floating": { "spawn": { "x": 1082, "y": 142 } } },
+  "hub": { "x": 380, "y": 385, "width": 640, "height": 130, "mode": "chat", "docked": null },
+  "strings": false
+}
+```
 
 An action's `run(ctx)` receives `ctx.args` and the controls: `print`, `send`, `runCommand`, `setMode`, `dock`, `setStrings`, `outputs` (`spawn`, `close`, `popOut`, `callHome`, `ping`, `append`, `update`, `resolve`, …) and `registry`.
 
@@ -181,6 +215,8 @@ An action's `run(ctx)` receives `ctx.args` and the controls: `print`, `send`, `r
 | `popout [output]` | Move an output into its own window |
 | `home [output\|all]` | Close the pop-outs and bring the outputs back beside the field |
 | `ping [output]` | Flash an output (and focus its window) |
+| `profile [list\|save\|load\|delete\|export] [name]` | Saved layouts (`.profile` files) |
+| `reset` | Back to the standard layout (saved layouts are kept) |
 | `strings [on\|off]` | Toggle the tethers and beacons |
 | `close [output]`, `clear [output]` | Close an output, or clear the log or an output |
 | `rename <output> <title>` | Rename an output |
@@ -219,7 +255,7 @@ The field and output panels are built from three exported pieces, and you can us
 |---|---|
 | `useDragResize(options)` | Moving a panel and resizing it from all four corners. The opposite corner stays fixed, resizing stops at the edge of the window, a dragged panel always stays grabbable, and panels are pulled back on screen when the window shrinks. `onCommit` runs once at the end of each move or resize. `onHandleKeyDown` adds keyboard control to a focusable handle: arrow keys move, Alt+arrow keys resize, and Shift makes the steps larger. |
 | `<ResizeCorners onStart={startResize} />` | Corner grips that appear on hover. On touch screens they stay visible and are bigger. |
-| `usePressHoldDrag(options)` | Hold (400 ms) to rearrange, drag to reorder, drag off to remove. Arrow keys, Delete and Esc do the same from the keyboard. |
+| `usePressHoldDrag(options)` | Hold (400 ms) to rearrange, drag to reorder, drag off to remove. Arrow keys, Delete and Esc do the same from the keyboard. Pass `onDropOutside(index, at)` to place an item where it was dropped instead of removing it. Any element marked `data-uif-trash` is a drop target that removes the item. |
 
 ### A draggable, resizable panel
 

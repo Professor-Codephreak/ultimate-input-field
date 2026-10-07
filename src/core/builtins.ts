@@ -185,6 +185,57 @@ export const builtinActions: Action[] = [
     },
   },
   {
+    id: 'profile',
+    label: 'Layouts',
+    command: 'profile',
+    aliases: ['layout'],
+    icon: '▦',
+    description: 'profile [list|save <name>|load <name>|delete <name>|export [name]] - saved layouts (.profile)',
+    builtin: true,
+    defaultHidden: true,
+    run(ctx) {
+      const [sub = 'list', ...rest] = ctx.args;
+      const name = rest.join(' ').trim();
+      const { layout } = ctx;
+      switch (sub) {
+        case 'list': {
+          const names = layout.list();
+          ctx.print(names.length ? names.map(n => (n === layout.active ? `* ${n}` : `  ${n}`)).join('\n') : 'no saved layouts');
+          return;
+        }
+        case 'save':
+          if (!name) return ctx.print('profile: usage profile save <name>', 'err');
+          ctx.print(`saved "${layout.save(name).name}"`);
+          return;
+        case 'load':
+          if (!name) return ctx.print('profile: usage profile load <name>', 'err');
+          return layout.load(name) ? ctx.print(`loaded "${name}"`) : ctx.print(`profile: no layout "${name}"`, 'err');
+        case 'delete':
+          return layout.remove(name) ? ctx.print(`deleted "${name}"`) : ctx.print(`profile: no layout "${name}"`, 'err');
+        case 'export':
+          layout.exportProfile(name || undefined);
+          ctx.print(`exported ${name || 'the current layout'}`);
+          return;
+        default:
+          // "profile work" is short for "profile load work".
+          return layout.load(ctx.args.join(' ')) ? ctx.print(`loaded "${ctx.args.join(' ')}"`) : ctx.print(`profile: unknown "${sub}"`, 'err');
+      }
+    },
+  },
+  {
+    id: 'reset',
+    label: 'Reset layout',
+    command: 'reset',
+    icon: '↺',
+    description: 'reset - back to the standard layout (saved layouts are kept)',
+    builtin: true,
+    defaultHidden: true,
+    run(ctx) {
+      ctx.layout.reset();
+      ctx.print('reset to the standard layout');
+    },
+  },
+  {
     id: 'actions',
     label: 'List actions',
     command: 'actions',

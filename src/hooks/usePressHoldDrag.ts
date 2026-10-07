@@ -13,14 +13,22 @@ export interface DragState {
   height: number;
   /** Insertion index among the remaining items. */
   target: number;
-  /** Pointer is far enough outside the bar that dropping removes the item. */
+  /** Pointer is far enough outside the container to count as "off" it. */
   outside: boolean;
+  /** Pointer is over an element marked `data-uif-trash`; dropping removes the item. */
+  overTrash: boolean;
 }
 
 interface Options {
   containerRef: React.RefObject<HTMLElement>;
   onReorder(from: number, to: number): void;
   onRemove(index: number): void;
+  /**
+   * Dropped outside the container (and not on a trash target). When given,
+   * this replaces the default of removing the item, e.g. to place it freely.
+   * `at` is where the item's top-left corner should go.
+   */
+  onDropOutside?(index: number, at: { x: number; y: number }): void;
   holdMs?: number;
   /** How far outside the container counts as "off the bar". */
   removeDistance?: number;
@@ -29,36 +37,58 @@ interface Options {
 const HOLD_SLOP = 6;
 const DRAG_SLOP = 3;
 
+/** True when the point is over an element marked as a trash target (`data-uif-trash`). */
+export function isOverTrash(x: number, y: number): boolean {
+  return document.elementsFromPoint(x, y).some(el => (el as HTMLElement).dataset?.uifTrash !== undefined);
+}
+
+/**
+ * Where an item dropped at (x, y) goes among a container's `data-uif-item`
+ * children, skipping the item being dragged (pass -1 when it is not one of them).
+ */
+export function insertionIndex(container: HTMLElement, x: number, y: number, dragged = -1): number {
+  let target = 0;
+  container.querySelectorAll<HTMLElement>('[data-uif-item]').forEach(el => {
+    if (Number(el.dataset.uifItem) === dragged) return;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) return;
+    if (y > r.bottom || (y >= r.top && x > r.left + r.width / 2)) target++;
+  });
+  return target;
+}
+
 /**
  * Press and hold an item to enter arrange mode, then drag to reorder or drag
  * it off the container to remove it. Items need `data-uif-item={index}`.
  */
-export function usePressHoldDrag({ containerRef, onReorder, onRemove, holdMs = 400, removeDistance = 40 }: Options) {
+export function usePressHoldDrag({
+  containerRef,
+  onReorder,
+  onRemove,
+  onDropOutside,
+  holdMs = 400,
+  removeDistance = 40,
+}: Options) {
   const [arranging, setArranging] = useState(false);
   const [drag, setDrag] = useState<DragState | null>(null);
   const arrangingRef = useRef(arranging);
   arrangingRef.current = arranging;
   const suppressClick = useRef(false);
   const cleanup = useRef<() => void>();
-  const live = useRef({ onReorder, onRemove });
-  live.current = { onReorder, onRemove };
+  const live = useRef({ onReorder, onRemove, onDropOutside });
+  live.current = { onReorder, onRemove, onDropOutside };
 
   useEffect(() => () => cleanup.current?.(), []);
 
   const measure = useCallback(
     (x: number, y: number, dragged: number) => {
       const box = containerRef.current;
-      if (!box) return { target: 0, outside: false };
+      const overTrash = isOverTrash(x, y);
+      if (!box) return { target: 0, outside: false, overTrash };
       const b = box.getBoundingClientRect();
       const outside =
         x < b.left - removeDistance || x > b.right + removeDistance || y < b.top - removeDistance || y > b.bottom + removeDistance;
-      let target = 0;
-      box.querySelectorAll<HTMLElement>('[data-uif-item]').forEach(el => {
-        if (Number(el.dataset.uifItem) === dragged) return;
-        const r = el.getBoundingClientRect();
-        if (y > r.bottom || (y >= r.top && x > r.left + r.width / 2)) target++;
-      });
-      return { target, outside };
+      return { target: insertionIndex(box, x, y, dragged), outside, overTrash };
     },
     [containerRef, removeDistance],
   );
@@ -122,8 +152,12 @@ export function usePressHoldDrag({ containerRef, onReorder, onRemove, holdMs = 4
         if (!dragging) return;
         const result = measure(last.x, last.y, index);
         setDrag(null);
-        if (result.outside) live.current.onRemove(index);
-        else if (result.target !== index) live.current.onReorder(index, result.target);
+        const { onDropOutside: place, onRemove: remove, onReorder: reorder } = live.current;
+        if (result.overTrash) remove(index);
+        else if (result.outside) {
+          if (place) place(index, { x: last.x - (start.x - rect.left), y: last.y - (start.y - rect.top) });
+          else remove(index);
+        } else if (result.target !== index) reorder(index, result.target);
       };
 
       const stop = () => {

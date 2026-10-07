@@ -8,11 +8,12 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react';
-import type { OutputField, OutputMessage, OutputsApi, Rect, UIFProviderOptions } from '../types';
+import type { HubLayoutHandle, LayoutApi, OutputField, OutputMessage, OutputsApi, Rect, UIFProviderOptions } from '../types';
 import { createActionRegistry, type Action, type ActionRegistry } from '../core/actions';
 import { builtinActions } from '../core/builtins';
 import { createBus, KEY_PARAM, OUTPUT_PARAM, type Bus } from '../core/bus';
 import { loadJSON, saveJSON } from '../core/storage';
+import { parseProfile, profileFileName, serializeProfile, STANDARD_PROFILE, type UIFProfile } from '../core/profile';
 import { OutputField as OutputPanel } from './OutputField';
 import { Tethers } from './Tethers';
 
@@ -54,6 +55,9 @@ export interface UIFContextValue {
   sendTo(text: string, outputId: string): void;
   /** The input field registers how chat messages are sent; returns an unregister function. */
   registerSender(fn: (text: string, outputId: string) => void): () => void;
+  layout: LayoutApi;
+  /** The input field registers its layout so profiles can read and apply it. */
+  registerHubLayout(handle: HubLayoutHandle): () => void;
 }
 
 export const HUB_KEY = '__hub';
@@ -291,6 +295,126 @@ export function UIFProvider({
     [outputs],
   );
 
+  // ---- Layout profiles (.profile) -------------------------------------------
+  const hubLayout = useRef<HubLayoutHandle | null>(null);
+  const registerHubLayout = useCallback((handle: HubLayoutHandle) => {
+    hubLayout.current = handle;
+    return () => {
+      if (hubLayout.current === handle) hubLayout.current = null;
+    };
+  }, []);
+  const [profiles, setProfiles] = useState<Record<string, UIFProfile>>(() =>
+    loadJSON(`uif:${storageKey}:profiles`, {}),
+  );
+  const [activeProfile, setActiveProfile] = useState<string | null>(() =>
+    loadJSON(`uif:${storageKey}:profile`, null),
+  );
+  const profilesRef = useRef(profiles);
+  profilesRef.current = profiles;
+  const stringsRef = useRef(strings);
+  stringsRef.current = strings;
+
+  const storeProfiles = useCallback(
+    (next: Record<string, UIFProfile>) => {
+      profilesRef.current = next;
+      setProfiles(next);
+      saveJSON(`uif:${storageKey}:profiles`, next);
+    },
+    [storageKey],
+  );
+  const markActive = useCallback(
+    (name: string | null) => {
+      setActiveProfile(name);
+      saveJSON(`uif:${storageKey}:profile`, name);
+    },
+    [storageKey],
+  );
+
+  const layout = useMemo<LayoutApi>(() => {
+    const capture = (name: string): UIFProfile => ({
+      'uif.profile': 1,
+      name,
+      savedAt: new Date().toISOString(),
+      actions: registry.snapshot(),
+      hub: hubLayout.current?.get() ?? { x: 0, y: 0, width: 600, height: 120, mode: 'chat', docked: null },
+      strings: stringsRef.current,
+    });
+    const apply = (p: UIFProfile) => {
+      registry.restore(p.actions);
+      hubLayout.current?.set(p.hub);
+      setStrings(p.strings);
+    };
+    const reset = () => {
+      registry.reset();
+      hubLayout.current?.set(null);
+      setStrings(defaultStrings);
+      markActive(STANDARD_PROFILE);
+    };
+    const download = (p: UIFProfile) => {
+      const url = URL.createObjectURL(new Blob([serializeProfile(p)], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = profileFileName(p.name);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    return {
+      list: () => Object.keys(profilesRef.current).sort(),
+      active: activeProfile,
+      capture,
+      save(name) {
+        const clean = name.trim();
+        if (!clean || clean === STANDARD_PROFILE) throw new Error(`"${STANDARD_PROFILE}" is the built-in layout; pick another name`);
+        const p = capture(clean);
+        storeProfiles({ ...profilesRef.current, [clean]: p });
+        markActive(clean);
+        return p;
+      },
+      load(name) {
+        if (name === STANDARD_PROFILE) {
+          reset();
+          return true;
+        }
+        const p = profilesRef.current[name];
+        if (!p) return false;
+        apply(p);
+        markActive(name);
+        return true;
+      },
+      remove(name) {
+        if (!profilesRef.current[name]) return false;
+        const { [name]: _gone, ...rest } = profilesRef.current;
+        storeProfiles(rest);
+        if (activeProfile === name) markActive(null);
+        return true;
+      },
+      reset,
+      exportProfile(name) {
+        const saved = name ? profilesRef.current[name] : undefined;
+        if (name && !saved && name !== activeProfile) throw new Error(`no profile "${name}"`);
+        download(saved ?? capture(name ?? activeProfile ?? 'layout'));
+      },
+      importProfile(text, fileName) {
+        let data: unknown;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          throw new Error('not a valid .profile file: it is not JSON');
+        }
+        const fallback = fileName?.replace(/\.profile$|\.json$/i, '') || 'imported';
+        const p = parseProfile(data, fallback);
+        const name = p.name === STANDARD_PROFILE ? `${STANDARD_PROFILE}-imported` : p.name;
+        const stored = { ...p, name };
+        storeProfiles({ ...profilesRef.current, [name]: stored });
+        apply(stored);
+        markActive(name);
+        return name;
+      },
+    };
+  }, [activeProfile, defaultStrings, markActive, registry, setStrings, storeProfiles]);
+
   const setRect = useCallback((id: string, rect: Rect) => patch(id, f => ({ ...f, rect })), [patch]);
 
   const requestScreens = useCallback(async () => {
@@ -407,6 +531,8 @@ export function UIFProvider({
       zIndexOf,
       sendTo,
       registerSender,
+      layout,
+      registerHubLayout,
     }),
     [
       registry,
@@ -423,6 +549,8 @@ export function UIFProvider({
       zIndexOf,
       sendTo,
       registerSender,
+      layout,
+      registerHubLayout,
     ],
   );
 
