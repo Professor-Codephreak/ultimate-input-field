@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { ActionContext, DockEdge, LogKind, UIFMode, UltimateInputFieldProps } from '../types';
 import type { Action } from '../core/actions';
 import { parseCommand } from '../core/commands';
-import { useDragResize, type Corner } from '../hooks/useDragResize';
+import { useDragResize } from '../hooks/useDragResize';
 import { Button } from './ui/Button';
 import { IconSend, IconTerminal, IconType } from './ui/Icons';
 import { ActionBar } from './ActionBar';
+import { ResizeCorners } from './ResizeCorners';
 import { UIFProvider, useOptionalUIF, useUIF } from './UIFContext';
 import '../styles/UltimateInputField.css';
 
@@ -16,12 +17,6 @@ interface LogLine {
 }
 
 const MAX_LOG = 300;
-const CORNERS: { corner: Corner; arrow?: string }[] = [
-  { corner: 'br', arrow: '↘' },
-  { corner: 'bl', arrow: '↙' },
-  { corner: 'tr', arrow: '↗' },
-  { corner: 'tl' },
-];
 
 function isAsyncIterable(v: unknown): v is AsyncIterable<string> {
   return !!v && typeof (v as AsyncIterable<string>)[Symbol.asyncIterator] === 'function';
@@ -379,20 +374,7 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
         {right && <div className="uif-modules uif-modules-right">{right}</div>}
       </div>
 
-      {!docked && resizable && (
-        <div className="corner-tabs">
-          {CORNERS.map(({ corner, arrow }) => (
-            <div
-              key={corner}
-              className={`corner-tab ${corner} ${arrow ? 'expander' : 'resize-handle'}`}
-              onPointerDown={e => startResize(e, corner)}
-              title={`Resize ${corner}`}
-            >
-              {arrow && <div className={`expander-arrow ${corner}-arrow`}>{arrow}</div>}
-            </div>
-          ))}
-        </div>
-      )}
+      {!docked && resizable && <ResizeCorners onStart={startResize} />}
     </div>
   );
 };

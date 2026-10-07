@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import type { OutputField as OutputFieldData } from '../types';
 import { useDragResize } from '../hooks/useDragResize';
 import { useUIF } from './UIFContext';
+import { ResizeCorners } from './ResizeCorners';
 
 interface ViewProps {
   field: OutputFieldData;
@@ -89,7 +90,7 @@ export function OutputField({ field }: { field: OutputFieldData }) {
         onPopOut={() => outputs.popOut(field.id)}
         onClose={() => outputs.close(field.id)}
       />
-      <div className="uif-output-resize" onPointerDown={e => startResize(e, 'br')} title="Resize" />
+      <ResizeCorners onStart={startResize} />
     </div>
   );
 }

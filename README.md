@@ -277,9 +277,9 @@ The component automatically supports dark mode when the `.dark` class is applied
 - Smooth animations during drag operations
 
 ### Resizing
-- Four corner resize tabs (top-left, top-right, bottom-left, bottom-right)
+- Resize grips on all four corners of the input field and of every output panel (they appear on hover, and stay visible on touch screens)
 - Each corner resizes in the appropriate diagonal direction
-- Maintains aspect ratio constraints
+- The opposite corner stays put, and a panel never resizes past the edge of the viewport
 - Smooth resize animations
 
 ### Docking
