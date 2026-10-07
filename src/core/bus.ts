@@ -9,7 +9,9 @@ export type BusMessage =
   | { type: 'out:ping'; id: string }
   | { type: 'out:geom'; id: string; geom: Rect }
   | { type: 'out:request-home'; id: string }
-  | { type: 'out:request-close'; id: string };
+  | { type: 'out:request-close'; id: string }
+  | { type: 'out:request-rename'; id: string; title: string }
+  | { type: 'out:input'; id: string; text: string };
 
 export interface Bus {
   post(msg: BusMessage): void;

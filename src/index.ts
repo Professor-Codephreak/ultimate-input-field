@@ -6,7 +6,7 @@ export type { UIFContextValue } from './components/UIFContext';
 export { OutputWindow } from './components/OutputWindow';
 export { HUB_KEY } from './components/UIFContext';
 // The drag / resize template, for building your own panels and bars.
-export { useDragResize } from './hooks/useDragResize';
+export { useDragResize, KEYBOARD_HINT } from './hooks/useDragResize';
 export type { Corner } from './hooks/useDragResize';
 export { ResizeCorners } from './components/ResizeCorners';
 export { usePressHoldDrag } from './hooks/usePressHoldDrag';

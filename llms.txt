@@ -10,6 +10,7 @@ Facts a machine needs before changing this code:
 - Shared state lives in UIFProvider (src/components/UIFContext.tsx). UltimateBar creates one. A standalone UltimateInputField creates its own.
 - Pop-out windows load the same page with ?uif-output=<id>. The host must render OutputWindow when isOutputWindow() is true.
 - The hub and the pop-out windows talk over a BroadcastChannel named uif:<storageKey>. The hub owns the message history, and pop-outs only mirror it.
+- Each output has a reply box. Replies from a pop-out are sent to the hub as out:input, and the hub sends them through onSend into that output. Renames from a pop-out are sent as out:request-rename.
 - State is kept in localStorage under uif:<storageKey>:actions, :outputs, :strings and :hub. Every access is wrapped in try/catch.
 - Drag and resize use Pointer Events and document listeners. Do not add a drag library.
 - The drag and resize hooks are the approved template for every draggable or resizable panel. Reuse them instead of writing new pointer logic.
@@ -31,7 +32,7 @@ Facts a machine needs before changing this code:
 
 ## Drag and resize template
 
-- [useDragResize](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/hooks/useDragResize.ts): move and resize from all four corners. The opposite corner stays fixed and the panel stops at the viewport edge. A dragged panel keeps 60 px on screen. onCommit runs once per gesture.
+- [useDragResize](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/hooks/useDragResize.ts): move and resize from all four corners. The opposite corner stays fixed and the panel stops at the viewport edge. A dragged panel keeps 60 px on screen. onCommit runs once per gesture. onHandleKeyDown moves the panel with the arrow keys and resizes it with Alt+arrow keys. Pointer and keyboard share one resize function.
 - [ResizeCorners](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/components/ResizeCorners.tsx): bracket grips on the four corners. They show on hover, and on touch screens they are always shown and larger.
 - [usePressHoldDrag](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/hooks/usePressHoldDrag.ts): hold for 400 ms to arrange, then drag to reorder or drag off to remove. Items need a data-uif-item attribute. Arrow keys, Delete and Esc do the same from the keyboard.
 - [ActionBar](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/components/ActionBar.tsx): the reference use of usePressHoldDrag, with its placeholder slot, portaled ghost and add palette.
@@ -39,7 +40,7 @@ Facts a machine needs before changing this code:
 ## Actions and commands
 
 - [src/core/actions.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/core/actions.ts): the Action type and createActionRegistry. It handles order, hidden and custom actions, and saves them.
-- [src/core/builtins.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/core/builtins.ts): the built-in actions: spawn, strings, home, dock, popout, close, ping, outputs, screens, mode, clear, actions and help.
+- [src/core/builtins.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/core/builtins.ts): the built-in actions: spawn, strings, home, dock, popout, close, rename, ping, outputs, screens, mode, clear, actions and help.
 - [src/core/commands.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/core/commands.ts): tokenize and parseCommand. Quotes group words, a leading slash is optional, and aliases match regardless of case.
 
 ## Outputs and windows

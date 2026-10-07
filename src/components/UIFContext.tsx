@@ -50,6 +50,10 @@ export interface UIFContextValue {
   raise(key: string): void;
   /** Stacking order for a panel; the most recently raised panel is on top. */
   zIndexOf(key: string): number;
+  /** Send text as a chat message into a given output (used by the outputs' reply boxes). */
+  sendTo(text: string, outputId: string): void;
+  /** The input field registers how chat messages are sent; returns an unregister function. */
+  registerSender(fn: (text: string, outputId: string) => void): () => void;
 }
 
 export const HUB_KEY = '__hub';
@@ -247,6 +251,10 @@ export function UIFProvider({
       clear(id) {
         patch(id, f => ({ ...f, messages: [] }));
       },
+      rename(id, title) {
+        const t = title.trim();
+        if (t) patch(id, f => ({ ...f, title: t }));
+      },
       append(id, message) {
         const mid = newId('m');
         patch(id, f => ({ ...f, messages: [...f.messages, { ...message, id: mid }] }));
@@ -264,6 +272,23 @@ export function UIFProvider({
       },
     }),
     [bus, callHome, commit, patch, popoutUrl, raise, slotBeside, storageKey],
+  );
+
+  const sender = useRef<((text: string, outputId: string) => void) | null>(null);
+  const registerSender = useCallback((fn: (text: string, outputId: string) => void) => {
+    sender.current = fn;
+    return () => {
+      if (sender.current === fn) sender.current = null;
+    };
+  }, []);
+  const sendTo = useCallback(
+    (text: string, outputId: string) => {
+      if (!text.trim()) return;
+      // Without an input field there is nothing to answer, so just record the message.
+      if (sender.current) sender.current(text, outputId);
+      else outputs.append(outputId, { role: 'user', text });
+    },
+    [outputs],
   );
 
   const setRect = useCallback((id: string, rect: Rect) => patch(id, f => ({ ...f, rect })), [patch]);
@@ -344,6 +369,12 @@ export function UIFProvider({
         case 'out:request-close':
           outputs.close(msg.id);
           break;
+        case 'out:request-rename':
+          outputs.rename(msg.id, msg.title);
+          break;
+        case 'out:input':
+          sendTo(msg.text, msg.id);
+          break;
       }
     });
     // After a reload, pop-outs that are still open answer this; the rest come home.
@@ -357,7 +388,7 @@ export function UIFProvider({
       off();
       clearTimeout(t);
     };
-  }, [bus, callHome, outputs, patch]);
+  }, [bus, callHome, outputs, patch, sendTo]);
 
   const value = useMemo<UIFContextValue>(
     () => ({
@@ -374,8 +405,25 @@ export function UIFProvider({
       storageKey,
       raise,
       zIndexOf,
+      sendTo,
+      registerSender,
     }),
-    [registry, outputs, fields, strings, setStrings, flashes, setRect, requestScreens, bus, storageKey, raise, zIndexOf],
+    [
+      registry,
+      outputs,
+      fields,
+      strings,
+      setStrings,
+      flashes,
+      setRect,
+      requestScreens,
+      bus,
+      storageKey,
+      raise,
+      zIndexOf,
+      sendTo,
+      registerSender,
+    ],
   );
 
   return (

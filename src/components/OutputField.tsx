@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { OutputField as OutputFieldData } from '../types';
-import { useDragResize } from '../hooks/useDragResize';
+import { KEYBOARD_HINT, useDragResize } from '../hooks/useDragResize';
 import { useUIF } from './UIFContext';
 import { ResizeCorners } from './ResizeCorners';
 
@@ -10,14 +10,46 @@ interface ViewProps {
   flash: number;
   popped?: boolean;
   onHeaderPointerDown?: (e: React.PointerEvent) => void;
+  /** Keyboard move/resize for the header; makes the header focusable. */
+  onHeaderKeyDown?: (e: React.KeyboardEvent) => void;
+  onRename?: (title: string) => void;
+  /** Send a chat message into this output. Shows a reply box when set. */
+  onSubmit?: (text: string) => void;
   onPopOut?: () => void;
   onHome?: () => void;
   onClose: () => void;
 }
 
 /** Header and message list, shared by the in-page panel and the pop-out window. */
-export function OutputView({ field, active, flash, popped, onHeaderPointerDown, onPopOut, onHome, onClose }: ViewProps) {
+export function OutputView({
+  field,
+  active,
+  flash,
+  popped,
+  onHeaderPointerDown,
+  onHeaderKeyDown,
+  onRename,
+  onSubmit,
+  onPopOut,
+  onHome,
+  onClose,
+}: ViewProps) {
   const listRef = useRef<HTMLDivElement>(null);
+  const [editing, setEditing] = useState(false);
+  const [reply, setReply] = useState('');
+  const busy = field.messages.some(m => m.pending);
+
+  const finishRename = (title: string | null) => {
+    setEditing(false);
+    if (title !== null && title.trim() && title.trim() !== field.title) onRename?.(title);
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reply.trim() || busy) return;
+    onSubmit?.(reply);
+    setReply('');
+  };
   const last = field.messages[field.messages.length - 1];
 
   useEffect(() => {
@@ -28,9 +60,39 @@ export function OutputView({ field, active, flash, popped, onHeaderPointerDown, 
   return (
     <>
       {flash > 0 && <div key={flash} className="uif-flash" style={{ '--uif-color': field.color } as React.CSSProperties} />}
-      <div className="uif-output-header" onPointerDown={onHeaderPointerDown}>
+      <div
+        className="uif-output-header"
+        onPointerDown={editing ? undefined : onHeaderPointerDown}
+        onKeyDown={editing ? undefined : onHeaderKeyDown}
+        tabIndex={onHeaderKeyDown ? 0 : undefined}
+        role={onHeaderKeyDown ? 'group' : undefined}
+        aria-label={onHeaderKeyDown ? `${field.title} output. ${KEYBOARD_HINT}` : undefined}
+      >
         <span className="uif-output-dot" style={{ background: field.color }} />
-        <span className="uif-output-title">{field.title}</span>
+        {editing ? (
+          <input
+            className="uif-output-rename"
+            defaultValue={field.title}
+            aria-label="Output name"
+            autoFocus
+            onFocus={e => e.currentTarget.select()}
+            onPointerDown={e => e.stopPropagation()}
+            onKeyDown={e => {
+              e.stopPropagation();
+              if (e.key === 'Enter') finishRename(e.currentTarget.value);
+              if (e.key === 'Escape') finishRename(null);
+            }}
+            onBlur={e => finishRename(e.currentTarget.value)}
+          />
+        ) : (
+          <span
+            className="uif-output-title"
+            title={onRename ? 'Double-click to rename' : undefined}
+            onDoubleClick={onRename ? () => setEditing(true) : undefined}
+          >
+            {field.title}
+          </span>
+        )}
         {active && <span className="uif-output-badge">active</span>}
         <span className="uif-output-buttons" onPointerDown={e => e.stopPropagation()}>
           {onPopOut && (
@@ -51,14 +113,28 @@ export function OutputView({ field, active, flash, popped, onHeaderPointerDown, 
           </div>
         ))}
       </div>
+      {onSubmit && (
+        <form className="uif-output-reply" onSubmit={submit}>
+          <input
+            value={reply}
+            onChange={e => setReply(e.target.value)}
+            placeholder={`Reply in ${field.title}…`}
+            aria-label={`Message ${field.title}`}
+            className="uif-output-reply-input"
+          />
+          <button type="submit" disabled={!reply.trim() || busy} aria-label="Send">
+            ➤
+          </button>
+        </form>
+      )}
     </>
   );
 }
 
 /** A floating, draggable output panel inside the hub page. */
 export function OutputField({ field }: { field: OutputFieldData }) {
-  const { outputs, setRect, flashes, raise, zIndexOf } = useUIF();
-  const { position, size, setPosition, setSize, startDrag, startResize, isDragging } = useDragResize({
+  const { outputs, setRect, flashes, raise, zIndexOf, sendTo } = useUIF();
+  const { position, size, setPosition, setSize, startDrag, startResize, onHandleKeyDown, isDragging } = useDragResize({
     initialPosition: { x: field.rect.x, y: field.rect.y },
     initialSize: { width: field.rect.width, height: field.rect.height },
     minWidth: 220,
@@ -99,6 +175,9 @@ export function OutputField({ field }: { field: OutputFieldData }) {
         active={active}
         flash={flashes[field.id] ?? 0}
         onHeaderPointerDown={startDrag}
+        onHeaderKeyDown={onHandleKeyDown}
+        onRename={title => outputs.rename(field.id, title)}
+        onSubmit={text => sendTo(text, field.id)}
         onPopOut={() => outputs.popOut(field.id)}
         onClose={() => outputs.close(field.id)}
       />

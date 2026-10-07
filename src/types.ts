@@ -39,6 +39,7 @@ export interface OutputsApi {
   callHome(id: string | 'all'): void;
   ping(id: string): void;
   clear(id: string): void;
+  rename(id: string, title: string): void;
   append(id: string, message: Omit<OutputMessage, 'id'>): string;
   update(id: string, messageId: string, patch: Partial<OutputMessage>): void;
   /** Resolve an id, a 1-based index or a title to an output id. */

@@ -96,6 +96,24 @@ export const builtinActions: Action[] = [
     },
   },
   {
+    id: 'rename',
+    label: 'Rename output',
+    command: 'rename',
+    icon: '✎',
+    description: 'rename <output> <new title> - rename an output field',
+    builtin: true,
+    defaultHidden: true,
+    run(ctx) {
+      const [ref, ...rest] = ctx.args;
+      const title = rest.join(' ').trim();
+      if (!ref || !title) return ctx.print('rename: usage rename <output> <new title>', 'err');
+      const id = ctx.outputs.resolve(ref);
+      if (!id) return ctx.print(`rename: no output "${ref}"`, 'err');
+      ctx.outputs.rename(id, title);
+      ctx.print(`renamed ${ref} to ${title}`);
+    },
+  },
+  {
     id: 'ping',
     label: 'Ping output',
     command: 'ping',
