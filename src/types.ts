@@ -109,6 +109,12 @@ export interface SendMeta {
    * new message), and the parsed .persona, .memory and .model.
    */
   context: SendContext;
+  /**
+   * Add fields to this exchange's .history record, e.g. `{ receipt }` from a
+   * verifying engine (bankML's savante.history keeps one per answer). Later
+   * calls merge; a field named like a standard one (model, prompt) replaces it.
+   */
+  annotate(fields: Record<string, unknown>): void;
 }
 
 export type SendResult = void | string | Promise<string | void> | AsyncIterable<string>;

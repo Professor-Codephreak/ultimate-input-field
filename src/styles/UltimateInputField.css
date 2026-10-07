@@ -928,6 +928,7 @@
 .uif-history { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0.6rem; }
 .uif-history-item { display: flex; flex-direction: column; gap: 0.25rem; }
 .uif-history-meta { color: #64748b; font-size: 0.7rem; }
+.uif-history-receipt { color: #86efac; cursor: help; }
 
 .uif-memory { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0.3rem; }
 .uif-memory-item { display: flex; align-items: flex-start; gap: 0.4rem; padding: 0.35rem 0.45rem; border-radius: 0.3rem; background: rgba(148, 163, 184, 0.08); }

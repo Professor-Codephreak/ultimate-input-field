@@ -208,6 +208,7 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
       triggerGlow();
       const context = contextStore.forSend(text, id);
       const outputId = id;
+      const extra: Record<string, unknown> = {};
       // Each finished exchange goes into .history (bankml's record shape, plus the output it was in).
       const record = (reply: string) =>
         reply &&
@@ -220,8 +221,9 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
           assistant: reply,
           prompt: context.promptSource,
           model: modelLabel(context.model),
+          ...extra,
         });
-      const result = onSend?.(text, { outputId: id, context });
+      const result = onSend?.(text, { outputId: id, context, annotate: fields => Object.assign(extra, fields) });
       if (result === undefined) return;
       if (typeof result === 'string') {
         outputs.append(id, { role: 'assistant', text: result });

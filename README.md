@@ -200,6 +200,8 @@ onSend={async function* (text, { outputId, context }) {
 }}
 ```
 
+`meta.annotate(fields)` adds fields to that exchange's `.history` record. For example, a verifying engine can store its receipt (`meta.annotate({ receipt })`) the way bankML's `savante.history` does. The `.history` window marks records that carry a receipt.
+
 The system prompt is assembled the way bankml and the mindX boardroom do it:
 1. The persona's `system_prompt`, or the `.prompt`.
 2. `Behavioural traits:`, `Operating beliefs:` and `Priorities:` lines from a boardroom persona.
