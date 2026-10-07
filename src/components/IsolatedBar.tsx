@@ -42,6 +42,9 @@ export function IsolatedBar({ state, onChange, children }: Props) {
     setPosition({ x: state.x, y: state.y });
   }, [state.x, state.y, setPosition]);
 
+  // Taken out of the field, it comes to the front, so the field it left cannot cover it.
+  useEffect(() => raise(BAR_KEY), [raise]);
+
   // The whole bar stays on screen: a long row standing up near the bottom moves up until its last button shows,
   // and again when the window shrinks.
   const barRef = useRef<HTMLDivElement>(null);
