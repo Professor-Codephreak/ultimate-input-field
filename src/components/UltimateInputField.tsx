@@ -7,9 +7,12 @@ import { Button } from './ui/Button';
 import { IconSend, IconTerminal, IconType } from './ui/Icons';
 import { ActionBar } from './ActionBar';
 import { ResizeCorners } from './ResizeCorners';
+import { WindowsMenu } from './WindowsMenu';
 import { HUB_KEY, UIFProvider, useOptionalUIF, useUIF } from './UIFContext';
 import { loadJSON, saveJSON } from '../core/storage';
 import type { HubLayout } from '../core/profile';
+import { modelLabel } from '../core/context';
+import { CONTEXT_KINDS } from '../core/windows';
 import '../styles/UltimateInputField.css';
 
 interface LogLine {
@@ -80,6 +83,7 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
     registerSender,
     layout,
     registerHubLayout,
+    context: contextStore,
   } = uif;
   const hubKey = `uif:${storageKey}:hub`;
   const [saved] = useState(() => loadJSON<Partial<HubLayout>>(hubKey, {}));
@@ -202,10 +206,26 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
       }
       outputs.append(id, { role: 'user', text });
       triggerGlow();
-      const result = onSend?.(text, { outputId: id });
+      const context = contextStore.forSend(text, id);
+      const outputId = id;
+      // Each finished exchange goes into .history (bankml's record shape, plus the output it was in).
+      const record = (reply: string) =>
+        reply &&
+        contextStore.appendHistory({
+          ts: Date.now() / 1000,
+          session: storageKey,
+          output: outputs.list().find(f => f.id === outputId)?.title,
+          output_id: outputId,
+          user: text,
+          assistant: reply,
+          prompt: context.promptSource,
+          model: modelLabel(context.model),
+        });
+      const result = onSend?.(text, { outputId: id, context });
       if (result === undefined) return;
       if (typeof result === 'string') {
         outputs.append(id, { role: 'assistant', text: result });
+        record(result);
         return;
       }
       const mid = outputs.append(id, { role: 'assistant', text: '', pending: true });
@@ -218,9 +238,11 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
             outputs.update(id, mid, { text: acc });
           }
           outputs.update(id, mid, { pending: false });
+          record(acc);
         } else {
           const reply = await result;
           outputs.update(id, mid, { text: reply ?? '', pending: false });
+          record(reply ?? '');
         }
       } catch (err) {
         outputs.update(id, mid, { text: `Error: ${(err as Error).message ?? err}`, pending: false });
@@ -228,7 +250,7 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
         setBusy(false);
       }
     },
-    [onSend, outputs, raise, triggerGlow],
+    [onSend, outputs, raise, triggerGlow, contextStore, storageKey],
   );
 
   // Reply boxes on the outputs (in-page and popped out) send through this field.
@@ -286,9 +308,11 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
       outputs,
       registry,
       layout,
+      windows: uif.windows,
+      remember: text => contextStore.remember(text),
       requestScreens: async () => print(await requestScreens()),
     }),
-    [print, send, mode, setMode, docked, dock, strings, setStrings, outputs, registry, layout, requestScreens],
+    [print, send, mode, setMode, docked, dock, strings, setStrings, outputs, registry, layout, uif.windows, contextStore, requestScreens],
   );
 
   const runAction = useCallback(
@@ -435,11 +459,16 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
               >
                 {terminal ? <IconType /> : <IconTerminal />}
               </Button>
+              <WindowsMenu />
               <ActionBar
                 registry={registry}
                 layout={layout}
                 onRun={action => void runAction(action)}
-                pressed={{ strings, dock: !!docked }}
+                pressed={{
+                  strings,
+                  dock: !!docked,
+                  ...Object.fromEntries(CONTEXT_KINDS.map(k => [`win-${k}`, uif.windows.isOpen(k)])),
+                }}
               />
             </div>
             {status && !terminal && <span className={`uif-status is-${status.kind}`}>{status.text}</span>}

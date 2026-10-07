@@ -15,6 +15,8 @@ interface ViewProps {
   onRename?: (title: string) => void;
   /** Send a chat message into this output. Shows a reply box when set. */
   onSubmit?: (text: string) => void;
+  /** Keep a reply in .memory. Shows a ◈ button on replies when set. */
+  onRemember?: (text: string) => void;
   onPopOut?: () => void;
   onHome?: () => void;
   onClose: () => void;
@@ -30,10 +32,12 @@ export function OutputView({
   onHeaderKeyDown,
   onRename,
   onSubmit,
+  onRemember,
   onPopOut,
   onHome,
   onClose,
 }: ViewProps) {
+  const [kept, setKept] = useState<Record<string, boolean>>({});
   const listRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState(false);
   const [reply, setReply] = useState('');
@@ -106,12 +110,35 @@ export function OutputView({
       </div>
       <div className="uif-output-body" ref={listRef}>
         {field.messages.length === 0 && <div className="uif-output-empty">No messages yet.</div>}
-        {field.messages.map(m => (
-          <div key={m.id} className={`uif-msg uif-msg-${m.role}`}>
-            {m.text}
-            {m.pending && <span className="uif-caret">▍</span>}
-          </div>
-        ))}
+        {field.messages.map(m => {
+          const keep = onRemember && m.role === 'assistant' && !m.pending && m.text;
+          const msg = (
+            <div key={m.id} className={`uif-msg uif-msg-${m.role}`}>
+              {m.text}
+              {m.pending && <span className="uif-caret">▍</span>}
+            </div>
+          );
+          if (!keep) return msg;
+          // The keep button sits beside the reply, not inside it, so copying the reply copies only the reply.
+          return (
+            <div key={m.id} className="uif-msg-row">
+              {msg}
+              <button
+                type="button"
+                className={`uif-msg-keep ${kept[m.id] ? 'is-kept' : ''}`}
+                title={kept[m.id] ? 'Kept in .memory' : 'Keep this reply in .memory'}
+                aria-label="Remember this reply"
+                disabled={kept[m.id]}
+                onClick={() => {
+                  onRemember(m.text);
+                  setKept(k => ({ ...k, [m.id]: true }));
+                }}
+              >
+                ◈
+              </button>
+            </div>
+          );
+        })}
       </div>
       {onSubmit && (
         <form className="uif-output-reply" onSubmit={submit}>
@@ -133,7 +160,7 @@ export function OutputView({
 
 /** A floating, draggable output panel inside the hub page. */
 export function OutputField({ field }: { field: OutputFieldData }) {
-  const { outputs, setRect, flashes, raise, zIndexOf, sendTo } = useUIF();
+  const { outputs, setRect, flashes, raise, zIndexOf, sendTo, context } = useUIF();
   const { position, size, setPosition, setSize, startDrag, startResize, onHandleKeyDown, isDragging } = useDragResize({
     initialPosition: { x: field.rect.x, y: field.rect.y },
     initialSize: { width: field.rect.width, height: field.rect.height },
@@ -178,6 +205,7 @@ export function OutputField({ field }: { field: OutputFieldData }) {
         onHeaderKeyDown={onHandleKeyDown}
         onRename={title => outputs.rename(field.id, title)}
         onSubmit={text => sendTo(text, field.id)}
+        onRemember={text => void context.remember(text, 'response')}
         onPopOut={() => outputs.popOut(field.id)}
         onClose={() => outputs.close(field.id)}
       />

@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import type { Action, ActionRegistry } from './core/actions';
 import type { HubLayout, UIFProfile } from './core/profile';
+import type { SendContext } from './core/context';
+import type { ContextKind } from './core/windows';
 
 export type UIFMode = 'chat' | 'terminal';
 export type DockEdge = 'top' | 'bottom' | 'left' | 'right';
@@ -91,11 +93,22 @@ export interface ActionContext {
   outputs: OutputsApi;
   registry: ActionRegistry;
   layout: LayoutApi;
+  /** Open, close or toggle the context windows (.history, .memory, .prompt, .persona, .model). */
+  windows: { isOpen(kind: ContextKind): boolean; show(kind: ContextKind): void; hide(kind: ContextKind): void; toggle(kind: ContextKind): void };
+  /** Add a note to .memory. */
+  remember(text: string): Promise<void>;
   requestScreens(): Promise<void>;
 }
 
 export interface SendMeta {
   outputId: string;
+  /**
+   * The context to call a model with: the composed system prompt
+   * (.prompt or the persona's, plus persona lines and the .memory block),
+   * ready-made chat `messages` (system, this output's recent exchanges, the
+   * new message), and the parsed .persona, .memory and .model.
+   */
+  context: SendContext;
 }
 
 export type SendResult = void | string | Promise<string | void> | AsyncIterable<string>;

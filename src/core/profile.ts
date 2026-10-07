@@ -1,4 +1,5 @@
-import type { DockEdge, UIFMode } from '../types';
+import type { DockEdge, Rect, UIFMode } from '../types';
+import { isContextKind, type ContextKind } from './windows';
 import type { ActionsLayout, CustomActionDef, Point } from './actions';
 
 /** Where the input field sits and how it is set up. */
@@ -23,6 +24,8 @@ export interface UIFProfile {
   actions: ActionsLayout;
   hub: HubLayout;
   strings: boolean;
+  /** Open context windows and where they are. Optional: older files have none. */
+  windows?: Partial<Record<ContextKind, Rect>>;
 }
 
 export const STANDARD_PROFILE = 'standard';
@@ -74,6 +77,15 @@ export function parseProfile(data: unknown, fallbackName = 'imported'): UIFProfi
   const mode = MODES.includes(h.mode as UIFMode) ? (h.mode as UIFMode) : 'chat';
   const docked = EDGES.includes(h.docked as DockEdge) ? (h.docked as DockEdge) : null;
 
+  const windows: Partial<Record<ContextKind, Rect>> = {};
+  if (isObj(data.windows)) {
+    for (const [kind, r] of Object.entries(data.windows)) {
+      if (!isContextKind(kind)) continue;
+      if (!isObj(r) || ![r.x, r.y, r.width, r.height].every(isNum)) return fail(`window "${kind}" is malformed`);
+      windows[kind] = { x: r.x as number, y: r.y as number, width: r.width as number, height: r.height as number };
+    }
+  }
+
   return {
     'uif.profile': 1,
     name: isStr(data.name) && data.name.trim() ? data.name.trim() : fallbackName,
@@ -81,6 +93,7 @@ export function parseProfile(data: unknown, fallbackName = 'imported'): UIFProfi
     actions: { order: a.order, hidden: a.hidden, custom: custom as CustomActionDef[], floating },
     hub: { x: h.x as number, y: h.y as number, width: h.width as number, height: h.height as number, mode, docked },
     strings: data.strings === true,
+    windows,
   };
 }
 

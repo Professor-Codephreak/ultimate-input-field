@@ -1,4 +1,5 @@
 import type { DockEdge } from '../types';
+import { CONTEXT_INFO, CONTEXT_KINDS } from './windows';
 import type { Action } from './actions';
 
 const EDGES: DockEdge[] = ['top', 'bottom', 'left', 'right'];
@@ -8,6 +9,24 @@ function needOutput(ctx: Parameters<Action['run']>[0], verb: string): string | u
   if (!id) ctx.print(`${verb}: no output ${ctx.args[0] ? `"${ctx.args[0]}"` : 'is active'}`, 'err');
   return id;
 }
+
+/** One action per context window, so each can be put on the bar, floated, or typed. */
+const windowActions: Action[] = CONTEXT_KINDS.map(kind => ({
+  id: `win-${kind}`,
+  label: CONTEXT_INFO[kind].file,
+  command: kind,
+  aliases: [CONTEXT_INFO[kind].file],
+  icon: CONTEXT_INFO[kind].icon,
+  description: `${kind} [open|close] - the ${CONTEXT_INFO[kind].file} window: ${CONTEXT_INFO[kind].summary.toLowerCase()}`,
+  builtin: true,
+  defaultHidden: true,
+  run(ctx) {
+    const arg = ctx.args[0];
+    if (arg === 'open') ctx.windows.show(kind);
+    else if (arg === 'close') ctx.windows.hide(kind);
+    else ctx.windows.toggle(kind);
+  },
+}));
 
 export const builtinActions: Action[] = [
   {
@@ -233,6 +252,22 @@ export const builtinActions: Action[] = [
     run(ctx) {
       ctx.layout.reset();
       ctx.print('reset to the standard layout');
+    },
+  },
+  ...windowActions,
+  {
+    id: 'remember',
+    label: 'Remember',
+    command: 'remember',
+    icon: '◈',
+    description: 'remember <text> - add a note to .memory',
+    builtin: true,
+    defaultHidden: true,
+    async run(ctx) {
+      const text = ctx.args.join(' ').trim();
+      if (!text) return ctx.print('remember: usage remember <text>', 'err');
+      await ctx.remember(text);
+      ctx.print('remembered');
     },
   },
   {

@@ -3,13 +3,19 @@ import { UltimateBar } from './components/UltimateBar';
 import './demo.css';
 import { useUIF } from './components/UIFContext';
 import type { Action } from './core/actions';
+import type { SendMeta } from './types';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-/** A stand-in for a model: streams the reply back word by word. */
-async function* echoBot(text: string) {
+/**
+ * A stand-in for a model: streams the reply back word by word. A real host
+ * would call its model with meta.context.messages and meta.context.model.
+ */
+async function* echoBot(text: string, meta: SendMeta) {
   await sleep(250);
-  for (const word of `You said: ${text}`.split(/(\s+)/)) {
+  const { persona, memory } = meta.context;
+  const who = persona?.name ? ` (as ${persona.name}${memory.length ? `, remembering ${memory.length} note${memory.length === 1 ? '' : 's'}` : ''})` : '';
+  for (const word of `You said: ${text}${who}`.split(/(\s+)/)) {
     await sleep(40);
     yield word;
   }
@@ -64,12 +70,13 @@ export function App() {
         Hold any action button, then drag it to a new slot or drop it anywhere on the screen. Drop it on the trash to
         hide it. <b>+ → Layout</b> saves and loads <code>.profile</code> layouts and resets to the standard one. Press{' '}
         <b>T</b> for terminal mode and try <code>spawn notes</code>, <code>strings on</code>, <code>popout notes</code>,{' '}
-        <code>home all</code>.
+        <code>home all</code>. The <b>▤</b> menu opens the <code>.history</code>, <code>.memory</code>, <code>.prompt</code>,{' '}
+        <code>.persona</code> and <code>.model</code> windows.
       </p>
       <UltimateBar
         storageKey="demo"
         actions={demoActions}
-        onSend={text => echoBot(text)}
+        onSend={(text, meta) => echoBot(text, meta)}
         left={<Clock />}
         right={<OutputCount />}
         initialSize={{ width: 640, height: 130 }}

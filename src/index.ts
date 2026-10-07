@@ -17,6 +17,11 @@ export type { Action, ActionRegistry, ActionsLayout, CustomActionDef, Point } fr
 export { parseProfile, serializeProfile, profileFileName, STANDARD_PROFILE, PROFILE_EXTENSION } from './core/profile';
 export type { UIFProfile, HubLayout } from './core/profile';
 export { builtinActions } from './core/builtins';
+export * from './core/context';
+export { CONTEXT_KINDS, CONTEXT_INFO, resolveContextKind } from './core/windows';
+export type { ContextKind } from './core/windows';
+export type { ContextApi } from './components/contextStore';
+export type { WindowsApi } from './components/UIFContext';
 export { parseCommand, tokenize } from './core/commands';
 export type {
   ActionContext,
