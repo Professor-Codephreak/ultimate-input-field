@@ -75,6 +75,8 @@ export function OutputWindow() {
         active={active}
         flash={flash}
         popped
+        onRename={title => bus.post({ type: 'out:request-rename', id, title })}
+        onSubmit={text => bus.post({ type: 'out:input', id, text })}
         onHome={() => bus.post({ type: 'out:request-home', id })}
         onClose={() => bus.post({ type: 'out:request-close', id })}
       />

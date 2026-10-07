@@ -40,6 +40,41 @@ function keepReachable(p: { x: number; y: number }, width: number) {
   };
 }
 
+type Box = { x: number; y: number; width: number; height: number };
+type Limits = Pick<Options, 'minWidth' | 'maxWidth' | 'minHeight' | 'maxHeight'>;
+
+/**
+ * Resize `start` by dragging `corner` by (dx, dy). The opposite corner stays put,
+ * and the moving edge stops at the viewport edge.
+ */
+function resizeFrom(start: Box, corner: Corner, dx: number, dy: number, limits: Limits): Box {
+  const { minWidth, maxWidth, minHeight, maxHeight } = limits;
+  const left = corner === 'tl' || corner === 'bl';
+  const top = corner === 'tl' || corner === 'tr';
+  const roomX = left ? start.x + start.width : window.innerWidth - start.x;
+  const roomY = top ? start.y + start.height : window.innerHeight - start.y;
+  const width = clamp(start.width + (left ? -dx : dx), minWidth, Math.max(minWidth, Math.min(maxWidth, roomX)));
+  const height = clamp(start.height + (top ? -dy : dy), minHeight, Math.max(minHeight, Math.min(maxHeight, roomY)));
+  return {
+    x: left ? start.x + start.width - width : start.x,
+    y: top ? start.y + start.height - height : start.y,
+    width,
+    height,
+  };
+}
+
+const KEY_STEP = 10;
+const KEY_STEP_LARGE = 50;
+const ARROWS: Record<string, [number, number]> = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
+
+/** Help text for a keyboard-operable handle (use as its aria-description or title). */
+export const KEYBOARD_HINT = 'Arrow keys move; Alt+arrow keys resize; hold Shift for larger steps';
+
 /** Pointer-driven move and corner resize for a fixed-position panel. */
 export function useDragResize(opts: Options) {
   // A saved position may come from a larger window.
@@ -71,26 +106,14 @@ export function useDragResize(opts: Options) {
     const move = (e: PointerEvent) => {
       const dx = e.clientX - gesture.startX;
       const dy = e.clientY - gesture.startY;
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
       if (gesture.kind === 'drag') {
         // Keep enough of the panel on screen to grab it again.
         setPosition(keepReachable({ x: gesture.x + dx, y: gesture.y + dy }, gesture.width));
         return;
       }
-      const { minWidth, maxWidth, minHeight, maxHeight } = live.current.opts;
-      const left = gesture.corner === 'tl' || gesture.corner === 'bl';
-      const top = gesture.corner === 'tl' || gesture.corner === 'tr';
-      // The edge being moved stops at the viewport edge; the opposite corner stays put.
-      const roomX = left ? gesture.x + gesture.width : vw - gesture.x;
-      const roomY = top ? gesture.y + gesture.height : vh - gesture.y;
-      const width = clamp(gesture.width + (left ? -dx : dx), minWidth, Math.max(minWidth, Math.min(maxWidth, roomX)));
-      const height = clamp(gesture.height + (top ? -dy : dy), minHeight, Math.max(minHeight, Math.min(maxHeight, roomY)));
-      setSize({ width, height });
-      setPosition({
-        x: left ? gesture.x + gesture.width - width : gesture.x,
-        y: top ? gesture.y + gesture.height - height : gesture.y,
-      });
+      const next = resizeFrom(gesture, gesture.corner ?? 'br', dx, dy, live.current.opts);
+      setSize({ width: next.width, height: next.height });
+      setPosition({ x: next.x, y: next.y });
     };
     const up = () => {
       setGesture(null);
@@ -104,6 +127,30 @@ export function useDragResize(opts: Options) {
       document.removeEventListener('pointerup', up);
     };
   }, [gesture]);
+
+  /**
+   * Keyboard equivalent for a focusable handle. Arrow keys move the panel and
+   * Alt+arrow keys resize it from the bottom-right corner. Shift uses larger steps.
+   */
+  const onHandleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const dir = ARROWS[e.key];
+    if (!dir || e.ctrlKey || e.metaKey) return;
+    const { opts, position: p, size: s } = live.current;
+    const step = e.shiftKey ? KEY_STEP_LARGE : KEY_STEP;
+    const [dx, dy] = [dir[0] * step, dir[1] * step];
+    let box: Box;
+    if (e.altKey) {
+      if (opts.resizable === false) return;
+      box = resizeFrom({ ...p, ...s }, 'br', dx, dy, opts);
+    } else {
+      if (opts.draggable === false) return;
+      box = { ...keepReachable({ x: p.x + dx, y: p.y + dy }, s.width), ...s };
+    }
+    e.preventDefault();
+    setPosition({ x: box.x, y: box.y });
+    setSize({ width: box.width, height: box.height });
+    opts.onCommit?.(box);
+  }, []);
 
   // When the window shrinks, bring panels that fell outside it back within reach.
   useEffect(() => {
@@ -125,5 +172,6 @@ export function useDragResize(opts: Options) {
     isResizing: gesture?.kind === 'resize',
     startDrag,
     startResize,
+    onHandleKeyDown,
   };
 }

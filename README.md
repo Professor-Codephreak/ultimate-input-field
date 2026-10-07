@@ -183,6 +183,7 @@ An action's `run(ctx)` receives `ctx.args` and the controls: `print`, `send`, `r
 | `ping [output]` | Flash an output (and focus its window) |
 | `strings [on\|off]` | Toggle the tethers and beacons |
 | `close [output]`, `clear [output]` | Close an output, or clear the log or an output |
+| `rename <output> <title>` | Rename an output |
 | `dock [top\|bottom\|left\|right\|off]` | Pin the field to an edge |
 | `mode [chat\|terminal]` | Switch modes (the **T** button does the same) |
 | `screens` | Ask for permission to place pop-outs on other monitors |
@@ -195,6 +196,12 @@ An action's `run(ctx)` receives `ctx.args` and the controls: `print`, `send`, `r
 - The input field remembers its position, size, mode and dock edge in `localStorage` under `storageKey`. The outputs (with their history) and the strings toggle are remembered too.
 - When the window shrinks, panels that fall outside it are pulled back within reach.
 - Clicking outside the bar closes the **+** menu and ends arrange mode.
+
+### Output panels
+
+- Each output has its own reply box. A message typed there goes into that output's thread through the same `onSend`, even in a pop-out window on another monitor.
+- Double-click an output's title to rename it (Enter saves, Escape cancels), or run `rename <output> <new title>`.
+- Focus a panel's header (or the input field's top handle) with Tab. Arrow keys then move it, Alt+arrow keys resize it, and Shift makes the steps larger.
 
 ### Outputs on other monitors
 
@@ -210,18 +217,18 @@ The field and output panels are built from three exported pieces, and you can us
 
 | Export | What it gives you |
 |---|---|
-| `useDragResize(options)` | Moving a panel and resizing it from all four corners. The opposite corner stays fixed, resizing stops at the edge of the window, a dragged panel always stays grabbable, and panels are pulled back on screen when the window shrinks. `onCommit` runs once at the end of each move or resize. |
+| `useDragResize(options)` | Moving a panel and resizing it from all four corners. The opposite corner stays fixed, resizing stops at the edge of the window, a dragged panel always stays grabbable, and panels are pulled back on screen when the window shrinks. `onCommit` runs once at the end of each move or resize. `onHandleKeyDown` adds keyboard control to a focusable handle: arrow keys move, Alt+arrow keys resize, and Shift makes the steps larger. |
 | `<ResizeCorners onStart={startResize} />` | Corner grips that appear on hover. On touch screens they stay visible and are bigger. |
 | `usePressHoldDrag(options)` | Hold (400 ms) to rearrange, drag to reorder, drag off to remove. Arrow keys, Delete and Esc do the same from the keyboard. |
 
 ### A draggable, resizable panel
 
 ```tsx
-import { useDragResize, ResizeCorners } from 'ultimate-input-field';
+import { useDragResize, ResizeCorners, KEYBOARD_HINT } from 'ultimate-input-field';
 import 'ultimate-input-field/dist/index.css';
 
 export function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  const { position, size, startDrag, startResize } = useDragResize({
+  const { position, size, startDrag, startResize, onHandleKeyDown } = useDragResize({
     initialPosition: { x: 80, y: 80 },
     initialSize: { width: 320, height: 200 },
     minWidth: 200,
@@ -234,7 +241,15 @@ export function Panel({ title, children }: { title: string; children: React.Reac
   return (
     // Any positioned element works; the grips anchor to its corners.
     <div style={{ position: 'fixed', left: position.x, top: position.y, width: size.width, height: size.height }}>
-      <header onPointerDown={startDrag} style={{ cursor: 'move', touchAction: 'none' }}>{title}</header>
+      <header
+        onPointerDown={startDrag}
+        onKeyDown={onHandleKeyDown} // arrow keys move, Alt+arrow keys resize
+        tabIndex={0}
+        aria-label={`${title}. ${KEYBOARD_HINT}`}
+        style={{ cursor: 'move', touchAction: 'none' }}
+      >
+        {title}
+      </header>
       {children}
       <ResizeCorners onStart={startResize} />
     </div>

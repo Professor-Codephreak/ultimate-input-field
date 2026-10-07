@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { ActionContext, DockEdge, LogKind, UIFMode, UltimateInputFieldProps } from '../types';
 import type { Action } from '../core/actions';
 import { parseCommand } from '../core/commands';
-import { useDragResize } from '../hooks/useDragResize';
+import { KEYBOARD_HINT, useDragResize } from '../hooks/useDragResize';
 import { Button } from './ui/Button';
 import { IconSend, IconTerminal, IconType } from './ui/Icons';
 import { ActionBar } from './ActionBar';
@@ -75,7 +75,7 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
   right,
 }) => {
   const uif = useUIF();
-  const { registry, outputs, strings, setStrings, hubRef, requestScreens, storageKey, raise, zIndexOf } = uif;
+  const { registry, outputs, strings, setStrings, hubRef, requestScreens, storageKey, raise, zIndexOf, registerSender } = uif;
   const hubKey = `uif:${storageKey}:hub`;
   const [saved] = useState(() => loadJSON<Partial<HubState>>(hubKey, {}));
 
@@ -101,7 +101,7 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
   const logRef = useRef<HTMLDivElement>(null);
   const logSeq = useRef(0);
 
-  const { position, size, setPosition, isDragging, isResizing, startDrag, startResize } = useDragResize({
+  const { position, size, setPosition, isDragging, isResizing, startDrag, startResize, onHandleKeyDown } = useDragResize({
     initialPosition:
       saved.x !== undefined && saved.y !== undefined
         ? { x: saved.x, y: saved.y }
@@ -180,12 +180,14 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
   );
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, target?: string) => {
       if (!text.trim()) return;
       // "@notes hello" goes to the output called notes, which is opened if it does not exist yet.
-      const routed = /^@(\S+)\s+([\s\S]+)$/.exec(text);
-      let id: string | undefined;
-      if (routed) {
+      const routed = target ? null : /^@(\S+)\s+([\s\S]+)$/.exec(text);
+      let id: string | undefined = target;
+      if (id) {
+        outputs.setActive(id);
+      } else if (routed) {
         text = routed[2];
         id = outputs.resolve(routed[1]) ?? outputs.spawn(routed[1]);
         outputs.setActive(id);
@@ -223,6 +225,9 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
     },
     [onSend, outputs, raise, triggerGlow],
   );
+
+  // Reply boxes on the outputs (in-page and popped out) send through this field.
+  useEffect(() => registerSender((text, outputId) => void send(text, outputId)), [registerSender, send]);
 
   // runCommand and runAction call each other (custom actions run command lines).
   const runCommandRef = useRef<(line: string) => void>(() => {});
@@ -349,7 +354,15 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
       )}
 
       {draggable && !docked && (
-        <div className={`drag-handle ${isDragging ? 'dragging' : ''}`} onPointerDown={startDrag}>
+        <div
+          className={`drag-handle ${isDragging ? 'dragging' : ''}`}
+          onPointerDown={startDrag}
+          onKeyDown={onHandleKeyDown}
+          tabIndex={0}
+          role="group"
+          aria-label={`Input field. ${KEYBOARD_HINT}`}
+          title={KEYBOARD_HINT}
+        >
           <div className="drag-indicator" />
         </div>
       )}
