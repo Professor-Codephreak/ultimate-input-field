@@ -229,6 +229,8 @@ onSend={async function* (text, { outputId, context }) {
 }}
 ```
 
+`meta.markReply({ silent: true })` marks the reply so an output with speak on does not read it aloud, for a reply the engine cannot vouch for. The bankML page marks every answer whose receipt does not match. A silent reply shows 🔇 in a speaking output.
+
 `meta.annotate(fields)` adds fields to that exchange's `.history` record. For example, a verifying engine can store its receipt (`meta.annotate({ receipt })`) the way bankML's `savante.history` does. The `.history` window marks records that carry a receipt.
 
 The system prompt is assembled the way bankml and the mindX boardroom do it:

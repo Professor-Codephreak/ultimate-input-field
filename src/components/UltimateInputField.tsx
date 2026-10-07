@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import type { ActionContext, DockEdge, LogKind, UIFMode, UltimateInputFieldProps } from '../types';
+import type { ActionContext, DockEdge, LogKind, OutputMessage, UIFMode, UltimateInputFieldProps } from '../types';
 import type { Action } from '../core/actions';
 import { parseCommand } from '../core/commands';
 import { KEYBOARD_HINT, useDragResize } from '../hooks/useDragResize';
@@ -251,14 +251,22 @@ const HubField: React.FC<UltimateInputFieldProps> = ({
           model: modelLabel(context.model),
           ...extra,
         });
-      const result = onSend?.(text, { outputId: id, context, annotate: fields => Object.assign(extra, fields) });
+      // what the engine says about its own reply (e.g. silent), applied when the reply message exists
+      const replyMarks: Pick<Partial<OutputMessage>, 'silent'> = {};
+      let replyId: string | null = null;
+      const markReply = (patch: Pick<Partial<OutputMessage>, 'silent'>) => {
+        Object.assign(replyMarks, patch);
+        if (replyId) outputs.update(outputId, replyId, patch);
+      };
+      const result = onSend?.(text, { outputId: id, context, annotate: fields => Object.assign(extra, fields), markReply });
       if (result === undefined) return;
       if (typeof result === 'string') {
-        outputs.append(id, { role: 'assistant', text: result });
+        outputs.append(id, { role: 'assistant', text: result, ...replyMarks });
         record(result);
         return;
       }
-      const mid = outputs.append(id, { role: 'assistant', text: '', pending: true });
+      const mid = outputs.append(id, { role: 'assistant', text: '', pending: true, ...replyMarks });
+      replyId = mid;
       setBusy(true);
       try {
         if (isAsyncIterable(result)) {

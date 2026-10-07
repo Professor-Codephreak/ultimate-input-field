@@ -19,6 +19,8 @@ export interface OutputMessage {
   role: 'user' | 'assistant' | 'system';
   text: string;
   pending?: boolean;
+  /** Never read aloud, even in an output with speak on (an engine marks a reply it does not vouch for). */
+  silent?: boolean;
 }
 
 export interface OutputField {
@@ -152,6 +154,11 @@ export interface SendMeta {
    * calls merge; a field named like a standard one (model, prompt) replaces it.
    */
   annotate(fields: Record<string, unknown>): void;
+  /**
+   * Change this exchange's reply message while (or after) it streams, e.g. `{ silent: true }` so an output with
+   * speak on does not read a reply the engine could not verify. Calls before the reply exists are kept for it.
+   */
+  markReply(patch: Pick<Partial<OutputMessage>, 'silent'>): void;
 }
 
 export type SendResult = void | string | Promise<string | void> | AsyncIterable<string>;

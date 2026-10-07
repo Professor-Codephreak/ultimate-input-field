@@ -657,7 +657,7 @@ export function UIFProvider({
     for (const f of fields) {
       if (!f.speak) continue;
       for (const m of f.messages) {
-        if (m.role !== 'assistant' || m.pending || !m.text.trim() || spoken.current.has(m.id)) continue;
+        if (m.role !== 'assistant' || m.pending || m.silent || !m.text.trim() || spoken.current.has(m.id)) continue;
         spoken.current.add(m.id);
         synth.speak(new SpeechSynthesisUtterance(m.text));
       }
