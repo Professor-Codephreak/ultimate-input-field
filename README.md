@@ -1,13 +1,17 @@
 # Ultimate Input Field
 
-A powerful, draggable, resizable, and dockable input field component for React with terminal and text modes, featuring glass morphism effects and smooth animations.
+A draggable, resizable, dockable input field for React, built as the centre of a modular UI bar. It has a chat mode and a **T terminal mode**, extensible action buttons you rearrange by press-and-hold drag and drop, and output fields you can spawn, pop out to other monitors, find with strings, and call back home.
 
 ## ✨ Features
 
 - **🎯 Draggable**: Drag the input field anywhere on the screen
 - **📏 Resizable**: Resize from any corner with intuitive controls
 - **📍 Dockable**: Dock to any edge of the screen
-- **🎨 Dual Modes**: Switch between text and terminal modes
+- **💬 / T Modes**: Chat (input → response) and terminal mode, where every action is a command
+- **🧩 Extensible actions**: Add actions, hold a button to rearrange by drag and drop, drag it off the bar to hide it
+- **🪟 Output fields**: Spawn several, pop them out into windows on other monitors, call them home
+- **〰 Strings**: Toggle tether lines to every output, with edge beacons pointing at pop-outs
+- **🧱 Modular bar**: `UltimateBar` places modules on either side of the field
 - **✨ Glass Morphism**: Beautiful backdrop blur effects
 - **💫 Smooth Animations**: Glow effects and smooth transitions
 - **🎛️ Customizable**: Extensive props for customization
@@ -31,7 +35,7 @@ yarn add ultimate-input-field
 ```tsx
 import React, { useState } from 'react';
 import { UltimateInputField } from 'ultimate-input-field';
-import 'ultimate-input-field/dist/styles.css';
+import 'ultimate-input-field/dist/index.css';
 
 function App() {
   const [value, setValue] = useState('');
@@ -69,7 +73,7 @@ function App() {
 ```tsx
 import React, { useState } from 'react';
 import { UltimateInputField } from 'ultimate-input-field';
-import 'ultimate-input-field/dist/styles.css';
+import 'ultimate-input-field/dist/index.css';
 
 function AdvancedApp() {
   const [value, setValue] = useState('');
@@ -119,20 +123,102 @@ function AdvancedApp() {
 }
 ```
 
+## 🧱 The bar, actions and outputs
+
+```tsx
+import { UltimateBar, isOutputWindow, OutputWindow, type Action } from 'ultimate-input-field';
+import 'ultimate-input-field/dist/index.css';
+
+const actions: Action[] = [
+  {
+    id: 'time',
+    label: 'Time',
+    command: 'time',
+    icon: '◷',
+    description: 'time - print the current time',
+    run: ctx => ctx.print(new Date().toLocaleTimeString()),
+  },
+];
+
+async function* reply(text: string) {
+  yield 'You said: ';
+  yield text;
+}
+
+export function Root() {
+  // Pop-out windows load the same URL with ?uif-output=<id>.
+  if (isOutputWindow()) return <OutputWindow />;
+  return (
+    <UltimateBar
+      storageKey="my-app"
+      actions={actions}
+      onSend={text => reply(text)}   // string | Promise<string> | AsyncIterable<string>
+      left={<Clock />}
+      right={<Status />}
+    />
+  );
+}
+```
+
+Modules (and anything else inside `UltimateBar`) can reach the shared state with `useUIF()`: `registry`, `outputs`, `fields`, `strings`, `setStrings`.
+
+### Actions
+
+- **Run** an action by tapping its button, or by typing its `command` (or an alias) in T mode. In chat mode, start the line with `/`.
+- **Rearrange**: press and hold a button (400 ms) to enter arrange mode, then drag it to a new slot. Drag a button off the bar to hide it, and press **Done** or Esc to finish. From the keyboard, choose **+ → Arrange…**, then use the arrow keys to move a button and Delete to hide it.
+- **Add**: **+** lists the hidden actions, and lets you make a custom action that runs commands (`spawn logs; strings on`) or sends text.
+- The order, the hidden actions and the custom actions are saved in `localStorage` under `storageKey`.
+
+An action's `run(ctx)` receives `ctx.args` and the controls: `print`, `send`, `runCommand`, `setMode`, `dock`, `setStrings`, `outputs` (`spawn`, `close`, `popOut`, `callHome`, `ping`, `append`, `update`, `resolve`, …) and `registry`.
+
+### Terminal commands
+
+| Command | Does |
+|---|---|
+| `help`, `actions` | List the commands, or the actions and whether each is on the bar |
+| `spawn [title]` | Open a new output field |
+| `outputs` | List the outputs (`*` marks the active one) |
+| `popout [output]` | Move an output into its own window |
+| `home [output\|all]` | Close the pop-outs and bring the outputs back beside the field |
+| `ping [output]` | Flash an output (and focus its window) |
+| `strings [on\|off]` | Toggle the tethers and beacons |
+| `close [output]`, `clear [output]` | Close an output, or clear the log or an output |
+| `dock [top\|bottom\|left\|right\|off]` | Pin the field to an edge |
+| `mode [chat\|terminal]` | Switch modes (the **T** button does the same) |
+| `screens` | Ask for permission to place pop-outs on other monitors |
+
+`[output]` can be an id, a 1-based index or a title, and defaults to the active output. A command that matches no action goes to `onCommand(name, args, ctx)`.
+
+### Outputs on other monitors
+
+A pop-out is a real browser window that you can drag to any monitor. It stays in sync with the hub through a `BroadcastChannel`. After you run `screens` and grant window-management permission (Chromium), new pop-outs open on the next screen.
+
+`home` closes the pop-outs and brings their panels back, history included. Closing a pop-out window yourself also brings that output home. If the hub page reloads, pop-outs that are still open reconnect.
+
+With strings on, in-page outputs are tied to the field by coloured curves. Pop-outs get a beacon at the edge of the viewport that points toward their window: click it to flash and focus the window, or double-click it to call the output home.
+
 ## 🎛️ API Reference
 
 ### Props
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `value` | `string` | - | **Required.** The current value of the input field |
-| `onChange` | `(value: string) => void` | - | **Required.** Callback when the value changes |
-| `onSend` | `() => void` | - | **Required.** Callback when the send button is clicked or Enter is pressed |
+| `value` | `string` | - | Controlled value; omit it to let the field manage its own text |
+| `onChange` | `(value: string) => void` | - | Called when the value changes |
+| `onSend` | `(text, { outputId }) => void \| string \| Promise<string> \| AsyncIterable<string>` | - | Chat-mode send; a returned value is written or streamed into the active output |
+| `onCommand` | `(name, args, ctx) => string \| void` | - | Handles terminal commands that match no action |
+| `onAction` | `(action, args) => void` | - | Called after any action runs |
+| `onModeChange` | `(mode) => void` | - | Called when the mode changes between chat and terminal |
+| `actions` | `Action[]` | `[]` | Extra actions, registered next to the built-ins |
+| `storageKey` | `string` | `'default'` | Namespaces saved state and the pop-out channel |
+| `popoutUrl` | `string` | current page | The page pop-out windows load |
+| `defaultStrings` | `boolean` | `false` | Whether the strings start visible |
+| `left` / `right` | `ReactNode` | - | Modules on either side of the field |
 | `isLoading` | `boolean` | `false` | Whether the component is in a loading state |
 | `className` | `string` | `''` | Additional CSS classes |
 | `placeholder` | `string` | `'Type a message...'` or `'Enter command...'` | Placeholder text |
 | `disabled` | `boolean` | `false` | Whether the input is disabled |
-| `mode` | `'text' \| 'terminal'` | `'text'` | The display mode of the input field |
+| `mode` | `'chat' \| 'terminal'` | `'chat'` | Initial mode (`'text'` still works as an alias for `'chat'`) |
 | `initialPosition` | `{ x: number; y: number }` | `{ x: center, y: center }` | Initial position on screen |
 | `initialSize` | `{ width: number; height: number }` | `{ width: 600, height: 120 }` | Initial size of the component |
 | `minWidth` | `number` | `300` | Minimum width in pixels |
@@ -197,15 +283,15 @@ The component automatically supports dark mode when the `.dark` class is applied
 - Smooth resize animations
 
 ### Docking
-- Click the menu button (☰) to open docking options
+- Use the dock action (▁) to pin the field to the bottom edge and back, or `dock top|bottom|left|right|off`
 - Dock to top, bottom, left, or right edges
 - Smooth transitions when docking/undocking
 - Maintains functionality while docked
 
 ### Modes
-- **Text Mode**: Standard text input with system font
-- **Terminal Mode**: Monospace font with green text for command-line feel
-- Toggle between modes with the mode button
+- **Chat mode**: Enter sends the text; the reply goes into the active output field
+- **T terminal mode**: Enter runs a command and prints the result to a log above the field; ↑/↓ step through the history
+- Switch with the **T** button or the `mode` command
 
 ### Effects
 - **Glass Morphism**: Backdrop blur with transparency
@@ -237,23 +323,23 @@ pnpm run clean
 ### Project Structure
 
 ```
-ultimate-input-field/
-├── src/
-│   ├── components/
-│   │   ├── UltimateInputField.tsx
-│   │   └── ui/
-│   │       ├── Button.tsx
-│   │       └── Icons.tsx
-│   ├── styles/
-│   │   └── UltimateInputField.css
-│   ├── types.ts
-│   └── index.ts
-├── dist/
-├── package.json
-├── tsconfig.json
-├── tsup.config.ts
-└── README.md
+src/
+├── core/            # framework-free: action registry, command parser, built-ins, BroadcastChannel bus
+├── hooks/           # useDragResize, usePressHoldDrag
+├── components/
+│   ├── UltimateInputField.tsx   # the hub: chat / T terminal, action bar
+│   ├── UltimateBar.tsx          # modular bar around the hub
+│   ├── UIFContext.tsx           # shared provider: registry, outputs, strings
+│   ├── ActionBar.tsx            # buttons, press-hold drag and drop, add palette
+│   ├── OutputField.tsx          # in-page output panel
+│   ├── OutputWindow.tsx         # pop-out window page
+│   └── Tethers.tsx              # strings and edge beacons
+├── styles/UltimateInputField.css
+├── types.ts
+└── index.ts
 ```
+
+Run `pnpm test` for the unit tests and `pnpm typecheck` to type-check.
 
 ## 🤝 Contributing
 
