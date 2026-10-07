@@ -8,10 +8,10 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react';
-import type { HubLayoutHandle, LayoutApi, OutputField, OutputMessage, OutputsApi, Rect, UIFProviderOptions } from '../types';
+import type { HubLayoutHandle, LayoutApi, OutputField, OutputMessage, OutputsApi, Rect, SpawnTarget, UIFProviderOptions } from '../types';
 import { createActionRegistry, type Action, type ActionRegistry } from '../core/actions';
 import { builtinActions } from '../core/builtins';
-import { createBus, KEY_PARAM, OUTPUT_PARAM, type Bus } from '../core/bus';
+import { createBus, KEY_PARAM, OUTPUT_PARAM, type Bus, type BusMessage } from '../core/bus';
 import { loadJSON, saveJSON } from '../core/storage';
 import { parseProfile, profileFileName, serializeProfile, STANDARD_PROFILE, type UIFProfile } from '../core/profile';
 import { OutputField as OutputPanel } from './OutputField';
@@ -31,7 +31,20 @@ interface ScreenInfo {
   availTop: number;
   availWidth: number;
   availHeight: number;
+  label?: string;
+  isPrimary?: boolean;
 }
+/* Presentation API: not in the DOM lib everywhere yet. */
+interface PresentationConnectionLike {
+  state: string;
+  send(data: string): void;
+  terminate(): void;
+  close(): void;
+  addEventListener(type: string, fn: (e: { data?: unknown }) => void): void;
+}
+type WindowWithPresentation = Window & {
+  PresentationRequest?: new (urls: string[]) => { start(): Promise<PresentationConnectionLike> };
+};
 interface ScreenDetails {
   screens: ScreenInfo[];
   currentScreen: ScreenInfo;
@@ -160,6 +173,9 @@ export function UIFProvider({
   const hubRef = useRef<HTMLElement | null>(null);
   const windows = useRef(new Map<string, Window>());
   const screens = useRef<ScreenDetails | null>(null);
+  const presentations = useRef(new Map<string, PresentationConnectionLike>());
+  /** Replies already read aloud (or there before speaking was turned on). */
+  const spoken = useRef(new Set<string>());
 
   /** Where the n-th output beside the hub goes: tiled in columns, right of the hub first. */
   const slotBeside = useCallback((n: number): Rect => {
@@ -192,13 +208,19 @@ export function UIFProvider({
         bus.post({ type: 'out:home', id });
         windows.current.get(id)?.close();
         windows.current.delete(id);
-        patch(id, f => ({ ...f, placement: 'inline', screenGeom: undefined, rect: slotBeside(n) }));
+        const conn = presentations.current.get(id);
+        presentations.current.delete(id);
+        if (conn && conn.state !== 'terminated') conn.terminate();
+        patch(id, f => ({ ...f, placement: 'inline', presented: false, screenGeom: undefined, rect: slotBeside(n) }));
       });
       setFlashes(prev => Object.fromEntries([...Object.entries(prev), ...ids.map(id => [id, (prev[id] ?? 0) + 1])]));
     },
     [bus, patch, slotBeside],
   );
 
+  const outputsRef = useRef<OutputsApi | null>(null);
+  /** Messages from a presentation connection (a cast device has no BroadcastChannel to this page). */
+  const busFromRemote = useRef<((msg: BusMessage) => void) | null>(null);
   const outputs = useMemo<OutputsApi>(
     () => ({
       list: () => fieldsRef.current,
@@ -206,7 +228,7 @@ export function UIFProvider({
         return activeRef.current;
       },
       setActive: id => setActiveId(id),
-      spawn(title) {
+      spawn(title, target?: SpawnTarget) {
         const n = fieldsRef.current.length;
         const id = newId('o');
         commit(prev => [
@@ -223,12 +245,23 @@ export function UIFProvider({
         setActiveId(id);
         activeRef.current = id;
         raise(id);
+        if (target) {
+          // after the field exists (the next microtask), send it where it was asked to go
+          queueMicrotask(() => {
+            if (target.speak) outputsRef.current?.setSpeak(id, true);
+            if (target.present) void outputsRef.current?.present(id);
+            else if (target.screen !== undefined || target.window) outputsRef.current?.popOut(id, { screen: target.screen });
+          });
+        }
         return id;
       },
       close(id) {
         bus.post({ type: 'out:home', id });
         windows.current.get(id)?.close();
         windows.current.delete(id);
+        const conn = presentations.current.get(id);
+        presentations.current.delete(id);
+        if (conn && conn.state !== 'terminated') conn.terminate();
         commit(prev => prev.filter(f => f.id !== id));
         setZOrder(prev => prev.filter(k => k !== id));
         if (activeRef.current === id) {
@@ -236,7 +269,7 @@ export function UIFProvider({
           setActiveId(rest[rest.length - 1]?.id ?? null);
         }
       },
-      popOut(id) {
+      popOut(id, opts) {
         const field = fieldsRef.current.find(f => f.id === id);
         if (!field) return;
         const k = fieldsRef.current.filter(f => f.placement === 'popout').length;
@@ -244,7 +277,18 @@ export function UIFProvider({
         let left = window.screenX + window.outerWidth + 20 + k * 30;
         let top = window.screenY + 60 + k * 30;
         const sd = screens.current;
-        if (sd) {
+        let note: string | undefined;
+        if (opts?.screen !== undefined) {
+          const chosen = sd?.screens[opts.screen - 1];
+          if (chosen) {
+            left = chosen.availLeft + 40 + k * 30;
+            top = chosen.availTop + 40 + k * 30;
+          } else {
+            note = sd
+              ? `there is no screen ${opts.screen} (this machine has ${sd.screens.length}); it opened beside this window`
+              : `screen ${opts.screen} needs screen access first (run "screens"); it opened beside this window`;
+          }
+        } else if (sd) {
           const cur = sd.currentScreen;
           const others = sd.screens.filter(s => s.availLeft !== cur.availLeft || s.availTop !== cur.availTop);
           const target = others[k % Math.max(others.length, 1)] ?? cur;
@@ -259,9 +303,63 @@ export function UIFProvider({
           `uif-${storageKey}-${id}`,
           `popup,width=${width + 40},height=${height + 120},left=${Math.round(left)},top=${Math.round(top)}`,
         );
-        if (!win) return;
+        if (!win) return 'the browser blocked the window (allow pop-ups for this page)';
         windows.current.set(id, win);
         patch(id, f => ({ ...f, placement: 'popout' }));
+        return note;
+      },
+      async present(id) {
+        const P = (window as WindowWithPresentation).PresentationRequest;
+        if (!P) return 'this browser cannot present to another display (the Presentation API is missing; Chrome has it)';
+        if (!fieldsRef.current.some(f => f.id === id)) return 'no such output';
+        const url = new URL(popoutUrl ?? window.location.href, window.location.href);
+        url.searchParams.set(OUTPUT_PARAM, id);
+        url.searchParams.set(KEY_PARAM, storageKey);
+        try {
+          const conn = await new P([url.toString()]).start();
+          presentations.current.set(id, conn);
+          patch(id, f => ({ ...f, placement: 'popout', presented: true }));
+          const gone = () => {
+            if (presentations.current.get(id) === conn) {
+              presentations.current.delete(id);
+              callHome(id);
+            }
+          };
+          conn.addEventListener('terminate', gone);
+          conn.addEventListener('close', gone);
+          // a cast device has no BroadcastChannel to this page: its messages come over the connection
+          conn.addEventListener('message', e => {
+            try {
+              busFromRemote.current?.(JSON.parse(String(e.data)));
+            } catch {
+              /* not ours */
+            }
+          });
+          return 'presented on the chosen display';
+        } catch (err) {
+          return `not presented: ${(err as Error).message || err}`;
+        }
+      },
+      setSpeak(id, on) {
+        if (on && !('speechSynthesis' in window)) return 'this browser cannot speak (no speech synthesis)';
+        const field = fieldsRef.current.find(f => f.id === id);
+        if (!field) return 'no such output';
+        if (on) field.messages.forEach(m => spoken.current.add(m.id));
+        else window.speechSynthesis?.cancel();
+        patch(id, f => ({ ...f, speak: on }));
+        return on ? `replies in ${field.title} will be read aloud` : `${field.title} is quiet`;
+      },
+      screens() {
+        const sd = screens.current;
+        if (!sd) return null;
+        return sd.screens.map((sc, i) => ({
+          index: i + 1,
+          label: sc.label || `screen ${i + 1}`,
+          primary: !!sc.isPrimary,
+          current: sc.availLeft === sd.currentScreen.availLeft && sc.availTop === sd.currentScreen.availTop,
+          width: sc.availWidth,
+          height: sc.availHeight,
+        }));
       },
       callHome,
       ping(id) {
@@ -294,6 +392,7 @@ export function UIFProvider({
     }),
     [bus, callHome, commit, patch, popoutUrl, raise, slotBeside, storageKey],
   );
+  outputsRef.current = outputs;
 
   const sender = useRef<((text: string, outputId: string) => void) | null>(null);
   const registerSender = useCallback((fn: (text: string, outputId: string) => void) => {
@@ -539,25 +638,50 @@ export function UIFProvider({
     return () => clearTimeout(t);
   }, [fields, storageKey]);
 
-  // Mirror pop-out fields to their windows.
+  // Mirror pop-out fields to their windows (and to presentation connections: a cast device has no BroadcastChannel).
   useEffect(() => {
     fields
       .filter(f => f.placement === 'popout')
-      .forEach(f => bus.post({ type: 'out:state', id: f.id, field: f, active: f.id === activeId }));
+      .forEach(f => {
+        const msg: BusMessage = { type: 'out:state', id: f.id, field: f, active: f.id === activeId };
+        bus.post(msg);
+        const conn = presentations.current.get(f.id);
+        if (conn?.state === 'connected') conn.send(JSON.stringify(msg));
+      });
   }, [fields, activeId, bus]);
+
+  // Outputs with speak on read new, finished replies aloud through the system's audio output.
+  useEffect(() => {
+    const synth = typeof window !== 'undefined' ? window.speechSynthesis : undefined;
+    if (!synth) return;
+    for (const f of fields) {
+      if (!f.speak) continue;
+      for (const m of f.messages) {
+        if (m.role !== 'assistant' || m.pending || !m.text.trim() || spoken.current.has(m.id)) continue;
+        spoken.current.add(m.id);
+        synth.speak(new SpeechSynthesisUtterance(m.text));
+      }
+    }
+  }, [fields]);
 
   // Messages from pop-out windows.
   useEffect(() => {
     const heard = new Set<string>();
-    const off = bus.on(msg => {
+    const handle = (msg: BusMessage) => {
       if (!('id' in msg)) return;
       const field = fieldsRef.current.find(f => f.id === msg.id);
       switch (msg.type) {
-        case 'out:hello':
+        case 'out:hello': {
           heard.add(msg.id);
-          if (field?.placement === 'popout') bus.post({ type: 'out:state', id: msg.id, field, active: msg.id === activeRef.current });
-          else bus.post({ type: 'out:home', id: msg.id });
+          const reply: BusMessage =
+            field?.placement === 'popout'
+              ? { type: 'out:state', id: msg.id, field, active: msg.id === activeRef.current }
+              : { type: 'out:home', id: msg.id };
+          bus.post(reply);
+          const conn = presentations.current.get(msg.id);
+          if (conn?.state === 'connected') conn.send(JSON.stringify(reply));
           break;
+        }
         case 'out:geom': {
           heard.add(msg.id);
           const g = field?.screenGeom;
@@ -589,7 +713,9 @@ export function UIFProvider({
           void contextStore.remember(msg.text, 'response');
           break;
       }
-    });
+    };
+    const off = bus.on(handle);
+    busFromRemote.current = handle;
     // After a reload, pop-outs that are still open answer this; the rest come home.
     bus.post({ type: 'hub:hello' });
     const t = setTimeout(() => {

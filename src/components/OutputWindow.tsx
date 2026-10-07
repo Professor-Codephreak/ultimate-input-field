@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { OutputField } from '../types';
-import { createBus, KEY_PARAM, OUTPUT_PARAM } from '../core/bus';
+import { createBus, KEY_PARAM, OUTPUT_PARAM, type BusMessage } from '../core/bus';
 import { OutputView } from './OutputField';
 
 /**
@@ -16,9 +16,38 @@ export function OutputWindow() {
   const [flash, setFlash] = useState(0);
   const [lost, setLost] = useState(false);
 
+  // Shown on another display through the Presentation API, the hub may be on another device (a cast receiver):
+  // every message also travels over the presentation connections.
+  const conns = useRef<{ send(d: string): void; state?: string }[]>([]);
+  const post = useCallback(
+    (msg: BusMessage) => {
+      bus.post(msg);
+      conns.current.forEach(c => c.state !== 'closed' && c.state !== 'terminated' && c.send(JSON.stringify(msg)));
+    },
+    [bus],
+  );
+
   useEffect(() => {
-    const off = bus.on(msg => {
-      if (msg.type === 'hub:hello') return bus.post({ type: 'out:hello', id });
+    const receiver = (navigator as Navigator & { presentation?: { receiver?: { connectionList: Promise<{ connections: unknown[]; addEventListener(t: string, f: (e: { connection: unknown }) => void): void }> } } }).presentation?.receiver;
+    const onRemote = (fn: (msg: BusMessage) => void) => (c: unknown) => {
+      const conn = c as { send(d: string): void; state?: string; addEventListener(t: string, f: (e: { data?: unknown }) => void): void };
+      conns.current.push(conn);
+      conn.addEventListener('message', e => {
+        try {
+          fn(JSON.parse(String(e.data)));
+        } catch {
+          /* not ours */
+        }
+      });
+      conn.send(JSON.stringify({ type: 'out:hello', id } satisfies BusMessage));
+    };
+    const off = bus.on(msg => handle(msg));
+    receiver?.connectionList.then(list => {
+      list.connections.forEach(onRemote(handle));
+      list.addEventListener('connectionavailable', e => onRemote(handle)(e.connection));
+    });
+    function handle(msg: BusMessage) {
+      if (msg.type === 'hub:hello') return post({ type: 'out:hello', id });
       if (!('id' in msg) || msg.id !== id) return;
       if (msg.type === 'out:state') {
         setField(msg.field);
@@ -30,8 +59,8 @@ export function OutputWindow() {
         setFlash(n => n + 1);
         window.focus();
       }
-    });
-    bus.post({ type: 'out:hello', id });
+    }
+    post({ type: 'out:hello', id });
     // No event fires when a window moves, so report geometry on a timer.
     let last = '';
     const report = () => {
@@ -39,13 +68,13 @@ export function OutputWindow() {
       const key = JSON.stringify(geom);
       if (key !== last) {
         last = key;
-        bus.post({ type: 'out:geom', id, geom });
+        post({ type: 'out:geom', id, geom });
       }
     };
     report();
     const timer = setInterval(report, 500);
     const noHub = setTimeout(() => setLost(true), 2000);
-    const bye = () => bus.post({ type: 'out:bye', id });
+    const bye = () => post({ type: 'out:bye', id });
     window.addEventListener('pagehide', bye);
     return () => {
       off();
@@ -54,7 +83,7 @@ export function OutputWindow() {
       window.removeEventListener('pagehide', bye);
       bus.close();
     };
-  }, [bus, id]);
+  }, [bus, id, post]);
 
   useEffect(() => {
     if (field) document.title = field.title;
@@ -75,11 +104,11 @@ export function OutputWindow() {
         active={active}
         flash={flash}
         popped
-        onRename={title => bus.post({ type: 'out:request-rename', id, title })}
-        onSubmit={text => bus.post({ type: 'out:input', id, text })}
-        onRemember={text => bus.post({ type: 'out:remember', id, text })}
-        onHome={() => bus.post({ type: 'out:request-home', id })}
-        onClose={() => bus.post({ type: 'out:request-close', id })}
+        onRename={title => post({ type: 'out:request-rename', id, title })}
+        onSubmit={text => post({ type: 'out:input', id, text })}
+        onRemember={text => post({ type: 'out:remember', id, text })}
+        onHome={() => post({ type: 'out:request-home', id })}
+        onClose={() => post({ type: 'out:request-close', id })}
       />
     </div>
   );

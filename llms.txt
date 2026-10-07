@@ -11,6 +11,8 @@ Facts a machine needs before changing this code:
 - Pop-out windows load the same page with ?uif-output=<id>. The host must render OutputWindow when isOutputWindow() is true.
 - The hub and the pop-out windows talk over a BroadcastChannel named uif:<storageKey>. The hub owns the message history, and pop-outs only mirror it.
 - Every chat message passes meta.context to onSend. It holds the system prompt, chat messages (system, the output's last 12 exchanges, the new message), the persona, the memory and the model. Finished exchanges are appended to .history.
+- The field is stacked when it is tall. Compressed, the input stops at the button row's height. Below 104 px the field goes sideways onto one row. The buttons scroll in one line instead of wrapping. A handheld first visit docks full width at the bottom.
+- spawn takes --window, --screen N (Window Management API), --present (Presentation API, synced over the connection) and --speak (speech synthesis).
 - Each output has a reply box. Replies from a pop-out are sent to the hub as out:input, and the hub sends them through onSend into that output. Renames from a pop-out are sent as out:request-rename.
 - State is kept in localStorage under uif:<storageKey>:actions, :outputs, :strings, :hub, :profiles, :profile, :windows, :history, :memory, :prompt, :promptSource, :persona and :model. Every access is wrapped in try/catch.
 - Drag and resize use Pointer Events and document listeners. Do not add a drag library.
@@ -37,12 +39,14 @@ Facts a machine needs before changing this code:
 - [ResizeCorners](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/components/ResizeCorners.tsx): bracket grips on the four corners. They show on hover, and on touch screens they are always shown and larger.
 - [usePressHoldDrag](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/hooks/usePressHoldDrag.ts): hold for 400 ms to arrange, then drag to reorder or drag off to remove. Items need a data-uif-item attribute. With onDropOutside, a drop off the container places the item instead. Elements marked data-uif-trash remove it. Arrow keys, Delete and Esc do the same from the keyboard.
 - [FloatingActions](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/components/FloatingActions.tsx): buttons placed anywhere on screen. Hold to move one, drop it on the bar to dock it, or drop it on the trash to hide it. Arrow keys move it, Home docks it and Delete hides it.
+- [useHoldDrag](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/hooks/useHoldDrag.ts): press and hold one element, then drag it; onDrop gets the release point. The button-row grip uses it.
+- [IsolatedBar](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/components/IsolatedBar.tsx): the button row as its own floating bar. It moves with useDragResize, joins the field when dropped on it, and can stand vertical.
 - [ActionBar](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/components/ActionBar.tsx): the reference use of usePressHoldDrag, with its placeholder slot, portaled ghost and add palette.
 
 ## Actions and commands
 
 - [src/core/actions.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/core/actions.ts): the Action type and createActionRegistry. It handles order, hidden and custom actions, and saves them.
-- [src/core/builtins.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/core/builtins.ts): the built-in actions: spawn, strings, home, dock, popout, close, rename, ping, outputs, screens, mode, clear, profile, reset, history, memory, prompt, persona, model, remember, actions and help.
+- [src/core/builtins.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/core/builtins.ts): the built-in actions: spawn, strings, home, dock, popout, close, rename, ping, outputs, screens, speak, present, isolate, join, arrange, mode, clear, profile, reset, history, memory, prompt, persona, model, remember, actions and help.
 - [src/core/commands.ts](https://github.com/Professor-Codephreak/ultimate-input-field/blob/main/src/core/commands.ts): tokenize and parseCommand. Quotes group words, a leading slash is optional, and aliases match regardless of case.
 
 ## Layout profiles

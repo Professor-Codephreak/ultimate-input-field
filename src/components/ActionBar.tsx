@@ -16,6 +16,8 @@ interface ActionBarProps {
   onRun(action: Action): void;
   /** Actions shown as switched on, such as strings while they are visible. */
   pressed?: Record<string, boolean>;
+  /** Buttons in a column (the isolated bar stood up sideways). */
+  vertical?: boolean;
 }
 
 function ActionIcon({ action }: { action: Action }) {
@@ -23,7 +25,7 @@ function ActionIcon({ action }: { action: Action }) {
 }
 
 /** The row of action buttons. Hold a button to rearrange; "+" adds actions. */
-export function ActionBar({ registry, layout, onRun, pressed = {} }: ActionBarProps) {
+export function ActionBar({ registry, layout, onRun, pressed = {}, vertical = false }: ActionBarProps) {
   useRegistryVersion(registry);
   const actions = registry.visible();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -90,12 +92,14 @@ export function ActionBar({ registry, layout, onRun, pressed = {} }: ActionBarPr
 
   return (
     <div
-      className={`uif-actionbar ${arranging ? 'is-arranging' : ''} ${freeDrag?.overBar ? 'is-drop-target' : ''}`}
+      className={`uif-actionbar ${arranging ? 'is-arranging' : ''} ${freeDrag?.overBar ? 'is-drop-target' : ''} ${vertical ? 'is-vertical' : ''}`}
       ref={containerRef}
       role="toolbar"
       aria-label="Actions"
+      aria-orientation={vertical ? 'vertical' : 'horizontal'}
     >
-      {items}
+      {/* the buttons scroll in one line when the field is compressed; the + palette stays outside the scroller */}
+      <div className="uif-actionbar-items">{items}</div>
       {arranging ? (
         <button type="button" className="uif-action uif-action-done" onClick={() => setArranging(false)}>
           Done
