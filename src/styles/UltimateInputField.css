@@ -238,7 +238,15 @@
 
 .ultimate-input-field *,
 .uif-output *,
-.uif-palette * {
+.uif-palette *,
+.uif-window,
+.uif-window *,
+.uif-isolated-bar,
+.uif-isolated-bar *,
+.uif-action-floating,
+.uif-trash,
+.uif-beacon {
+  /* the portaled pieces too: their max sizes must include padding and border */
   box-sizing: border-box;
 }
 
@@ -1062,7 +1070,9 @@
 .uif-isolated-bar.is-vertical { flex-direction: column; max-height: calc(100vh - 8px); max-width: none; }
 .uif-isolated-bar.is-vertical .uif-isolated-tools { flex-direction: column; }
 .uif-actionbar.is-vertical { flex-direction: column; }
-.uif-actionbar.is-vertical .uif-actionbar-items { flex-direction: column; overflow-x: hidden; overflow-y: auto; max-height: calc(100vh - 140px); }
+.uif-actionbar.is-vertical .uif-actionbar-items { flex-direction: column; overflow-x: hidden; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+/* standing up, the buttons take exactly the height left beside the bar's own tools, and scroll inside it */
+.uif-isolated-bar.is-vertical > .uif-actionbar { flex: 1 1 auto; min-height: 0; }
 .uif-actionbar.is-vertical .uif-palette { bottom: auto; top: 0; left: calc(100% + 0.5rem); }
 
 /* Handheld: full width at the edge it is docked to, touch-sized targets, no zoom on focus */
