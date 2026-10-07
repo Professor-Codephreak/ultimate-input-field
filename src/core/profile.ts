@@ -3,6 +3,15 @@ import { isContextKind, type ContextKind } from './windows';
 import type { ActionsLayout, CustomActionDef, Point } from './actions';
 
 /** Where the input field sits and how it is set up. */
+export type HubArrangement = 'auto' | 'stacked' | 'sideways';
+
+/** The button row taken out of the field as its own floating bar. */
+export interface IsolatedBar {
+  x: number;
+  y: number;
+  vertical: boolean;
+}
+
 export interface HubLayout {
   x: number;
   y: number;
@@ -10,6 +19,10 @@ export interface HubLayout {
   height: number;
   mode: UIFMode;
   docked: DockEdge | null;
+  /** Input above buttons, side by side, or chosen by height (auto). Optional: older files have none. */
+  arrange?: HubArrangement;
+  /** Where the isolated button row floats, or null when it is part of the field. */
+  isolated?: IsolatedBar | null;
 }
 
 /**
@@ -76,6 +89,13 @@ export function parseProfile(data: unknown, fallbackName = 'imported'): UIFProfi
   if (![h.x, h.y, h.width, h.height].every(isNum)) return fail('"hub" needs numeric x, y, width, height');
   const mode = MODES.includes(h.mode as UIFMode) ? (h.mode as UIFMode) : 'chat';
   const docked = EDGES.includes(h.docked as DockEdge) ? (h.docked as DockEdge) : null;
+  const arrange = (['auto', 'stacked', 'sideways'] as const).find(a => a === h.arrange) ?? 'auto';
+  let isolated: IsolatedBar | null = null;
+  if (isObj(h.isolated)) {
+    const b = h.isolated;
+    if (!isNum(b.x) || !isNum(b.y)) return fail('"hub.isolated" needs numeric x and y');
+    isolated = { x: b.x, y: b.y, vertical: b.vertical === true };
+  }
 
   const windows: Partial<Record<ContextKind, Rect>> = {};
   if (isObj(data.windows)) {
@@ -91,7 +111,7 @@ export function parseProfile(data: unknown, fallbackName = 'imported'): UIFProfi
     name: isStr(data.name) && data.name.trim() ? data.name.trim() : fallbackName,
     savedAt: isStr(data.savedAt) ? data.savedAt : new Date().toISOString(),
     actions: { order: a.order, hidden: a.hidden, custom: custom as CustomActionDef[], floating },
-    hub: { x: h.x as number, y: h.y as number, width: h.width as number, height: h.height as number, mode, docked },
+    hub: { x: h.x as number, y: h.y as number, width: h.width as number, height: h.height as number, mode, docked, arrange, isolated },
     strings: data.strings === true,
     windows,
   };

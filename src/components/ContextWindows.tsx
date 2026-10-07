@@ -177,6 +177,11 @@ function HistoryBody({ context }: { context: ContextApi }) {
                 {when(h.ts)}
                 {h.output && <span> · {h.output}</span>}
                 {h.model && <span> · {h.model}</span>}
+                {h.receipt !== undefined && (
+                  <span className="uif-history-receipt" title={JSON.stringify(h.receipt, null, 2)}>
+                    {' '}· receipt
+                  </span>
+                )}
               </div>
               <div className="uif-msg uif-msg-user">{h.user}</div>
               <div className="uif-msg uif-msg-assistant">{h.assistant}</div>

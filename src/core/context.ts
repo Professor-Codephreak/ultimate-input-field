@@ -98,7 +98,21 @@ export function personaName(p: PersonaDoc | null): string | undefined {
 
 const HIGH = new Set(['high', 'critical']);
 
-/** Boardroom-style lines appended after the prompt (traits, true beliefs, high priorities). */
+/** The persona's sourced facts about itself (`awareness.facts[].fact`, as in bankml.persona). */
+export function awarenessFacts(p: PersonaDoc): string[] {
+  const a = p.awareness;
+  const facts = a && typeof a === 'object' ? (a as { facts?: unknown }).facts : undefined;
+  if (!Array.isArray(facts)) return [];
+  return facts
+    .map(f => (typeof f === 'string' ? f : f && typeof f === 'object' ? (f as { fact?: unknown }).fact : undefined))
+    .filter((f): f is string => typeof f === 'string' && !!f.trim())
+    .map(f => f.trim());
+}
+
+/**
+ * Lines appended after the prompt: boardroom traits, true beliefs and high
+ * priorities, then the persona's awareness facts.
+ */
 export function personaLines(p: PersonaDoc): string[] {
   const lines: string[] = [];
   if (p.behavioral_traits?.length) lines.push(`Behavioural traits: ${p.behavioral_traits.join(', ')}`);
@@ -111,6 +125,8 @@ export function personaLines(p: PersonaDoc): string[] {
     })
     .map(([k]) => k.replace(/_/g, ' '));
   if (priorities.length) lines.push(`Priorities: ${priorities.join(', ')}`);
+  const facts = awarenessFacts(p);
+  if (facts.length) lines.push(`What I know about myself:\n${facts.map(f => `- ${f}`).join('\n')}`);
   return lines;
 }
 

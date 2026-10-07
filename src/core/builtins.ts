@@ -35,11 +35,30 @@ export const builtinActions: Action[] = [
     command: 'spawn',
     aliases: ['new'],
     icon: '⊞',
-    description: 'spawn [title] - open a new output field',
+    description: 'spawn [title] [--window] [--screen N] [--present] [--speak] - open a new output, here or on another monitor, display or the speakers',
     builtin: true,
-    run(ctx) {
-      const id = ctx.outputs.spawn(ctx.args.join(' ') || undefined);
+    async run(ctx) {
+      const words: string[] = [];
+      const target: { window?: boolean; screen?: number; present?: boolean; speak?: boolean } = {};
+      for (let i = 0; i < ctx.args.length; i++) {
+        const a = ctx.args[i];
+        if (a === '--window' || a === '--popout') target.window = true;
+        else if (a === '--present' || a === '--cast') target.present = true;
+        else if (a === '--speak' || a === '--voice') target.speak = true;
+        else if (a === '--screen') {
+          const n = Number(ctx.args[++i]);
+          if (!Number.isInteger(n) || n < 1) return ctx.print('spawn: --screen needs a monitor number (1, 2, …; see "screens")', 'err');
+          target.screen = n;
+        } else words.push(a);
+      }
+      const id = ctx.outputs.spawn(words.join(' ') || undefined);
       ctx.print(`spawned ${id}`);
+      if (target.speak) ctx.print(ctx.outputs.setSpeak(id, true));
+      if (target.present) ctx.print(await ctx.outputs.present(id));
+      else if (target.window || target.screen !== undefined) {
+        const note = ctx.outputs.popOut(id, { screen: target.screen });
+        if (note) ctx.print(note, 'err');
+      }
     },
   },
   {
@@ -88,17 +107,101 @@ export const builtinActions: Action[] = [
     },
   },
   {
+    id: 'isolate',
+    label: 'Isolate buttons',
+    command: 'isolate',
+    icon: '⠿',
+    description: 'isolate [vertical] - take the button row out of the field as its own floating bar (join puts it back)',
+    builtin: true,
+    defaultHidden: true,
+    run(ctx) {
+      const vertical = ['vertical', 'sideways', 'v'].includes(ctx.args[0] ?? '');
+      ctx.bar.isolate({ vertical });
+      ctx.print(`the button row floats on its own${vertical ? ', standing up' : ''}; "join" puts it back`);
+    },
+  },
+  {
+    id: 'join',
+    label: 'Join buttons',
+    command: 'join',
+    icon: '⤓',
+    description: 'join - put an isolated button row back into the field',
+    builtin: true,
+    defaultHidden: true,
+    run(ctx) {
+      if (!ctx.bar.isolated) return ctx.print('the button row is already in the field');
+      ctx.bar.join();
+      ctx.print('the button row is back in the field');
+    },
+  },
+  {
+    id: 'arrange',
+    label: 'Arrange field',
+    command: 'arrange',
+    icon: '⇵',
+    description: 'arrange [auto|stacked|sideways] - input above the buttons, side by side, or by height (auto)',
+    builtin: true,
+    defaultHidden: true,
+    run(ctx) {
+      const want = ctx.args[0];
+      if (!want) return ctx.print(`arrangement: ${ctx.bar.arrangement}`);
+      if (want !== 'auto' && want !== 'stacked' && want !== 'sideways') return ctx.print('arrange auto | stacked | sideways', 'err');
+      ctx.bar.arrange(want);
+      ctx.print(`arrangement: ${want}`);
+    },
+  },
+  {
+    id: 'speak',
+    label: 'Speak output',
+    command: 'speak',
+    aliases: ['voice'],
+    icon: '🔊',
+    description: 'speak [output] [on|off] - read an output\'s replies aloud (the system\'s audio output)',
+    builtin: true,
+    defaultHidden: true,
+    run(ctx) {
+      const last = ctx.args[ctx.args.length - 1];
+      const setting = last === 'on' || last === 'off' ? last : undefined;
+      const ref = setting ? ctx.args.slice(0, -1).join(' ') : ctx.args.join(' ');
+      const id = ctx.outputs.resolve(ref || undefined);
+      if (!id) return ctx.print(`speak: no output ${ref ? `"${ref}"` : 'is active'}`, 'err');
+      const now = ctx.outputs.list().find(f => f.id === id)?.speak;
+      ctx.print(ctx.outputs.setSpeak(id, setting ? setting === 'on' : !now));
+    },
+  },
+  {
+    id: 'present',
+    label: 'Present output',
+    command: 'present',
+    aliases: ['cast'],
+    icon: '📺',
+    description: 'present [output] - show an output on another display or cast device (Presentation API)',
+    builtin: true,
+    defaultHidden: true,
+    async run(ctx) {
+      const id = ctx.outputs.resolve(ctx.args.join(' ') || undefined);
+      if (!id) return ctx.print('present: no output is active', 'err');
+      ctx.print(await ctx.outputs.present(id));
+    },
+  },
+  {
     id: 'popout',
     label: 'Pop out',
     command: 'popout',
     aliases: ['pop'],
     icon: '⧉',
-    description: 'popout [output] - move an output into its own window',
+    description: 'popout [output] [--screen N] - move an output into its own window, on monitor N if given',
     builtin: true,
     defaultHidden: true,
     run(ctx) {
-      const id = needOutput(ctx, 'popout');
-      if (id) ctx.outputs.popOut(id);
+      const i = ctx.args.indexOf('--screen');
+      const screen = i >= 0 ? Number(ctx.args[i + 1]) : undefined;
+      if (i >= 0 && (!Number.isInteger(screen) || (screen as number) < 1)) return ctx.print('popout: --screen needs a monitor number', 'err');
+      const ref = (i >= 0 ? [...ctx.args.slice(0, i), ...ctx.args.slice(i + 2)] : ctx.args).join(' ');
+      const id = ctx.outputs.resolve(ref || undefined);
+      if (!id) return ctx.print(`popout: no output ${ref ? `"${ref}"` : 'is active'}`, 'err');
+      const note = ctx.outputs.popOut(id, { screen });
+      if (note) ctx.print(note, 'err');
     },
   },
   {
@@ -172,6 +275,11 @@ export const builtinActions: Action[] = [
     defaultHidden: true,
     async run(ctx) {
       await ctx.requestScreens();
+      const list = ctx.outputs.screens();
+      list?.forEach(sc =>
+        ctx.print(`${sc.index}  ${sc.label}  ${sc.width}×${sc.height}${sc.primary ? '  primary' : ''}${sc.current ? '  (this window)' : ''}`),
+      );
+      if (list) ctx.print('spawn <title> --screen N opens an output on monitor N');
     },
   },
   {

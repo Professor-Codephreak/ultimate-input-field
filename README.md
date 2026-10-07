@@ -162,6 +162,35 @@ export function Root() {
 
 Modules (and anything else inside `UltimateBar`) can reach the shared state with `useUIF()`: `registry`, `outputs`, `fields`, `strings`, `setStrings`.
 
+### Compressed, sideways, handheld
+
+The field stays complete at any size:
+- **Compressed:** as it gets shorter, the input shrinks until it is exactly as tall as the button row underneath it, and no further. As it grows, the input takes the extra height, up to the field's maximum.
+- **Sideways:** shorter than that, the field goes sideways. The input and the buttons share one row. `arrange sideways` holds it that way at any height, `arrange stacked` keeps the input above the buttons, and `arrange auto` (the default) chooses by height.
+- **The buttons never wrap** and squeeze the input: when they don't fit, they scroll in one line.
+- **Handheld:** on a phone or a narrow window, a first visit docks the field full width at the bottom, inside the safe area. The input uses 16 px text (no zoom on focus), the buttons are touch-sized (44 px), and menus open as sheets.
+
+### The button row on its own
+
+Press and hold the **⠿** grip, drag the button row out of the field and drop it anywhere. It floats there as its own bar:
+- **⇅** stands it up sideways, as one column; **⇆** lays it flat again.
+- Drag it by its grip, or move it with the arrow keys.
+- Drop it back on the field, or press **⤓**, to put it back.
+- `isolate [vertical]` and `join` do the same from the terminal, and Enter on the grip isolates it.
+
+Where it floats is saved with the field's layout, including in `.profile` files.
+
+### Spawn to other monitors and output devices
+
+| | |
+|---|---|
+| `spawn notes --window` | In its own window. |
+| `spawn notes --screen 2` | In its own window on monitor 2. Run `screens` once to allow it (Window Management API); it lists the monitors. `popout notes --screen 2` moves an existing output. |
+| `spawn notes --present` | On another display or a cast device, through the Presentation API (Chrome). The page and the display stay in sync over the presentation connection, so a device with no BroadcastChannel to this page works too. `present notes` shows an existing output; `home` ends the presentation. |
+| `spawn notes --speak` | Replies in that output are read aloud through the system's audio output (speech synthesis). 🔊 on the panel, or `speak notes on\|off`, switches it. |
+
+The targets combine (`spawn wall --screen 2 --speak`). From code: `outputs.spawn(title, { screen: 2, speak: true })`, `outputs.popOut(id, { screen })`, `outputs.present(id)`, `outputs.setSpeak(id, on)` and `outputs.screens()`.
+
 ### Actions
 
 - **Run** an action by tapping its button, or by typing its `command` (or an alias) in T mode. In chat mode, start the line with `/`.
@@ -200,9 +229,11 @@ onSend={async function* (text, { outputId, context }) {
 }}
 ```
 
+`meta.annotate(fields)` adds fields to that exchange's `.history` record. For example, a verifying engine can store its receipt (`meta.annotate({ receipt })`) the way bankML's `savante.history` does. The `.history` window marks records that carry a receipt.
+
 The system prompt is assembled the way bankml and the mindX boardroom do it:
 1. The persona's `system_prompt`, or the `.prompt`.
-2. `Behavioural traits:`, `Operating beliefs:` and `Priorities:` lines from a boardroom persona.
+2. `Behavioural traits:`, `Operating beliefs:` and `Priorities:` lines from a boardroom persona, and the persona's sourced `awareness` facts (as in `bankml.persona`) under `What I know about myself:`.
 3. The memory block: the newest notes first, at most 2,400 characters, under bankml's `MEMORY —` header.
 
 Each output is its own thread, so `messages` holds only that output's recent exchanges. From the terminal, `history`, `memory`, `prompt`, `persona` and `model` toggle their windows (add `open` or `close` to be explicit). Each is also an action you can put on the bar or float. Saved layouts (`.profile`) remember which windows are open and where.
@@ -243,12 +274,15 @@ An action's `run(ctx)` receives `ctx.args` and the controls: `print`, `send`, `r
 | Command | Does |
 |---|---|
 | `help`, `actions` | List the commands, or the actions and whether each is on the bar |
-| `spawn [title]` | Open a new output field |
+| `spawn [title] [--window] [--screen N] [--present] [--speak]` | Open a new output field, here or on another monitor, display or the speakers |
 | `outputs` | List the outputs (`*` marks the active one) |
-| `popout [output]` | Move an output into its own window |
+| `popout [output] [--screen N]` | Move an output into its own window, on monitor N if given |
 | `home [output\|all]` | Close the pop-outs and bring the outputs back beside the field |
 | `ping [output]` | Flash an output (and focus its window) |
 | `profile [list\|save\|load\|delete\|export] [name]` | Saved layouts (`.profile` files) |
+| `arrange [auto\|stacked\|sideways]` | Input above the buttons, side by side, or chosen by height |
+| `isolate [vertical]`, `join` | Take the button row out of the field as its own bar, or put it back |
+| `speak [output] [on\|off]`, `present [output]` | Read an output's replies aloud, or show it on another display |
 | `reset` | Back to the standard layout (saved layouts are kept) |
 | `history`, `memory`, `prompt`, `persona`, `model` `[open\|close]` | Toggle a context window |
 | `remember <text>` | Add a note to `.memory` |
@@ -410,39 +444,26 @@ export function Tiles() {
 
 ## 🎨 Styling
 
-The component comes with built-in styles that can be customized using CSS variables:
+The field's colours are CSS custom properties prefixed `--uif-k-` (HSL triples), so they never overwrite a host page's own `--accent`, `--muted` or `--background`. Override them on `:root` or any ancestor:
 
 ```css
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
-  --primary: 222.2 47.4% 11.2%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 210 40% 96%;
-  --secondary-foreground: 222.2 84% 4.9%;
-  --muted: 210 40% 96%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-  --accent: 210 40% 96%;
-  --accent-foreground: 222.2 84% 4.9%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 222.2 84% 4.9%;
+  --uif-k-foreground: 222.2 84% 4.9%;
+  --uif-k-muted-foreground: 215.4 16.3% 46.9%;
+  --uif-k-ring: 222.2 84% 4.9%;
+  /* also: --uif-k-background, -primary, -secondary, -muted, -accent, -destructive (and their -foreground), -border, -input */
 }
 ```
 
 ### Dark Mode
 
-The component automatically supports dark mode when the `.dark` class is applied to a parent element:
+The tokens switch to their dark values when the `.dark` class is applied to a parent element:
 
 ```css
 .dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-  --primary: 210 40% 98%;
-  --primary-foreground: 222.2 47.4% 11.2%;
-  /* ... other dark mode variables */
+  --uif-k-foreground: 210 40% 98%;
+  --uif-k-muted-foreground: 215 20.2% 65.1%;
+  /* … */
 }
 ```
 

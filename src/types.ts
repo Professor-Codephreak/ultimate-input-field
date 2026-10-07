@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Action, ActionRegistry } from './core/actions';
-import type { HubLayout, UIFProfile } from './core/profile';
+import type { HubArrangement, HubLayout, UIFProfile } from './core/profile';
 import type { SendContext } from './core/context';
 import type { ContextKind } from './core/windows';
 
@@ -30,15 +30,44 @@ export interface OutputField {
   messages: OutputMessage[];
   /** Last reported screen geometry of a popped-out window. */
   screenGeom?: Rect;
+  /** Replies in this output are read aloud (speech synthesis, the system's audio output). */
+  speak?: boolean;
+  /** Shown on another display through the Presentation API (a second screen, a cast device). */
+  presented?: boolean;
+}
+
+/** Where a spawned output goes besides this page: its own window, a given monitor, a display, the speakers. */
+export interface SpawnTarget {
+  window?: boolean;
+  /** 1-based monitor number (needs screen access: the `screens` command). */
+  screen?: number;
+  present?: boolean;
+  speak?: boolean;
+}
+
+export interface ScreenInfoLine {
+  index: number;
+  label: string;
+  primary: boolean;
+  current: boolean;
+  width: number;
+  height: number;
 }
 
 export interface OutputsApi {
   list(): OutputField[];
   activeId: string | null;
   setActive(id: string): void;
-  spawn(title?: string): string;
+  spawn(title?: string, target?: SpawnTarget): string;
   close(id: string): void;
-  popOut(id: string): void;
+  /** Open the output in its own window; with `screen`, on that monitor. Returns a note when something fell back. */
+  popOut(id: string, opts?: { screen?: number }): string | void;
+  /** Show the output on another display or cast device (Presentation API). Resolves with what happened. */
+  present(id: string): Promise<string>;
+  /** Read this output's replies aloud, or stop. Returns what happened. */
+  setSpeak(id: string, on: boolean): string;
+  /** The monitors, once screen access was granted (`screens`); null before. */
+  screens(): ScreenInfoLine[] | null;
   callHome(id: string | 'all'): void;
   ping(id: string): void;
   clear(id: string): void;
@@ -97,6 +126,14 @@ export interface ActionContext {
   windows: { isOpen(kind: ContextKind): boolean; show(kind: ContextKind): void; hide(kind: ContextKind): void; toggle(kind: ContextKind): void };
   /** Add a note to .memory. */
   remember(text: string): Promise<void>;
+  /** The button row: part of the field, or isolated as its own floating bar; and how the field is arranged. */
+  bar: {
+    isolated: boolean;
+    isolate(opts?: { vertical?: boolean }): void;
+    join(): void;
+    arrangement: HubArrangement;
+    arrange(a: HubArrangement): void;
+  };
   requestScreens(): Promise<void>;
 }
 
@@ -109,6 +146,12 @@ export interface SendMeta {
    * new message), and the parsed .persona, .memory and .model.
    */
   context: SendContext;
+  /**
+   * Add fields to this exchange's .history record, e.g. `{ receipt }` from a
+   * verifying engine (bankML's savante.history keeps one per answer). Later
+   * calls merge; a field named like a standard one (model, prompt) replaces it.
+   */
+  annotate(fields: Record<string, unknown>): void;
 }
 
 export type SendResult = void | string | Promise<string | void> | AsyncIterable<string>;

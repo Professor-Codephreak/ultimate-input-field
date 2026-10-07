@@ -1,40 +1,41 @@
 /* Ultimate Input Field Styles */
 
-/* CSS Variables */
+/* The field's colour tokens. Prefixed (--uif-k-*) so the library never overwrites a host page's own
+   --accent, --muted, --background… (found when the bankML console embedded it). */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
-  --primary: 222.2 47.4% 11.2%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 210 40% 96%;
-  --secondary-foreground: 222.2 84% 4.9%;
-  --muted: 210 40% 96%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-  --accent: 210 40% 96%;
-  --accent-foreground: 222.2 84% 4.9%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 222.2 84% 4.9%;
+  --uif-k-background: 0 0% 100%;
+  --uif-k-foreground: 222.2 84% 4.9%;
+  --uif-k-primary: 222.2 47.4% 11.2%;
+  --uif-k-primary-foreground: 210 40% 98%;
+  --uif-k-secondary: 210 40% 96%;
+  --uif-k-secondary-foreground: 222.2 84% 4.9%;
+  --uif-k-muted: 210 40% 96%;
+  --uif-k-muted-foreground: 215.4 16.3% 46.9%;
+  --uif-k-accent: 210 40% 96%;
+  --uif-k-accent-foreground: 222.2 84% 4.9%;
+  --uif-k-destructive: 0 84.2% 60.2%;
+  --uif-k-destructive-foreground: 210 40% 98%;
+  --uif-k-border: 214.3 31.8% 91.4%;
+  --uif-k-input: 214.3 31.8% 91.4%;
+  --uif-k-ring: 222.2 84% 4.9%;
 }
 
 .dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-  --primary: 210 40% 98%;
-  --primary-foreground: 222.2 47.4% 11.2%;
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 212.7 26.8% 83.9%;
+  --uif-k-background: 222.2 84% 4.9%;
+  --uif-k-foreground: 210 40% 98%;
+  --uif-k-primary: 210 40% 98%;
+  --uif-k-primary-foreground: 222.2 47.4% 11.2%;
+  --uif-k-secondary: 217.2 32.6% 17.5%;
+  --uif-k-secondary-foreground: 210 40% 98%;
+  --uif-k-muted: 217.2 32.6% 17.5%;
+  --uif-k-muted-foreground: 215 20.2% 65.1%;
+  --uif-k-accent: 217.2 32.6% 17.5%;
+  --uif-k-accent-foreground: 210 40% 98%;
+  --uif-k-destructive: 0 62.8% 30.6%;
+  --uif-k-destructive-foreground: 210 40% 98%;
+  --uif-k-border: 217.2 32.6% 17.5%;
+  --uif-k-input: 217.2 32.6% 17.5%;
+  --uif-k-ring: 212.7 26.8% 83.9%;
 }
 
 /* Glow Animation */
@@ -141,16 +142,16 @@
 
 .ultimate-textarea:focus {
   outline: none;
-  box-shadow: 0 0 0 2px hsl(var(--ring)), 0 0 0 4px hsl(var(--ring) / 0.2);
+  box-shadow: 0 0 0 2px hsl(var(--uif-k-ring)), 0 0 0 4px hsl(var(--uif-k-ring) / 0.2);
 }
 
 .ultimate-textarea.text-mode {
   font-family: system-ui, -apple-system, sans-serif;
-  color: hsl(var(--foreground));
+  color: hsl(var(--uif-k-foreground));
 }
 
 .ultimate-textarea.text-mode::placeholder {
-  color: hsl(var(--muted-foreground));
+  color: hsl(var(--uif-k-muted-foreground));
 }
 
 .ultimate-textarea.terminal-mode {
@@ -227,8 +228,8 @@
 .ultimate-input-field {
   --uif-accent: #6366f1;
   --uif-term: #10b981;
-  --uif-text: hsl(var(--foreground));
-  --uif-dim: hsl(var(--muted-foreground));
+  --uif-text: hsl(var(--uif-k-foreground));
+  --uif-dim: hsl(var(--uif-k-muted-foreground));
   --uif-surface: rgba(17, 24, 39, 0.92);
   --uif-line: rgba(148, 163, 184, 0.25);
   color: var(--uif-text);
@@ -928,6 +929,7 @@
 .uif-history { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0.6rem; }
 .uif-history-item { display: flex; flex-direction: column; gap: 0.25rem; }
 .uif-history-meta { color: #64748b; font-size: 0.7rem; }
+.uif-history-receipt { color: #86efac; cursor: help; }
 
 .uif-memory { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0.3rem; }
 .uif-memory-item { display: flex; align-items: flex-start; gap: 0.4rem; padding: 0.35rem 0.45rem; border-radius: 0.3rem; background: rgba(148, 163, 184, 0.08); }
@@ -960,3 +962,144 @@
 .uif-msg-keep:hover { color: #a5b4fc; }
 .uif-msg-keep.is-kept { color: #818cf8; cursor: default; }
 @media (pointer: coarse) { .uif-msg-keep { opacity: 0.7; } }
+
+/* ------------------------------------------------------------------ */
+/* Compression, sideways, handheld, the isolated button row            */
+/* ------------------------------------------------------------------ */
+
+.ultimate-input-field { --uif-bar-h: 2.25rem; }
+
+/* Compressed: the input never gets shorter than the button row underneath it (equal size at the minimum),
+   and grows to the field's maximum. */
+.is-stacked .uif-prompt { min-height: var(--uif-bar-h); }
+.is-stacked .uif-prompt .ultimate-textarea { min-height: var(--uif-bar-h); padding-top: 0.4rem; padding-bottom: 0.4rem; }
+.ultimate-controls { min-height: var(--uif-bar-h); flex: none; }
+
+/* The buttons stay in one line and scroll when there are more than fit; the + palette lives outside the scroller. */
+.uif-actionbar { flex-wrap: nowrap; min-width: 0; }
+.uif-actionbar-items {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+.uif-actionbar-items > * { flex: none; }
+.uif-bar-slot { display: flex; min-width: 0; flex: 1; }
+
+/* Sideways: too short for two rows, so the input and the button row share one. */
+.is-sideways .uif-core { flex-direction: row; align-items: center; }
+.is-sideways .uif-prompt { flex: 1 1 40%; min-width: 7rem; min-height: var(--uif-bar-h); height: var(--uif-bar-h); align-self: center; }
+.is-sideways .uif-prompt .ultimate-textarea { height: var(--uif-bar-h); padding: 0.45rem 0.75rem; white-space: nowrap; overflow: hidden; }
+.is-sideways .ultimate-controls { flex: 0 1 auto; max-width: 60%; }
+.is-sideways .drag-handle { height: 4px; margin-bottom: 0; }
+.is-sideways .uif-modules { display: none; }
+
+/* The grip that takes the button row out of the field */
+.uif-bar-grip {
+  flex: none;
+  width: 1.1rem;
+  height: var(--uif-bar-h, 2.25rem);
+  padding: 0;
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--uif-dim, #94a3b8);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.uif-bar-grip:hover, .uif-bar-grip:focus-visible { background: rgba(148, 163, 184, 0.15); color: #e5e7eb; outline: none; }
+.uif-bar-grip.is-dragging { cursor: grabbing; }
+.uif-bar-ghost {
+  position: fixed;
+  z-index: 3000;
+  height: 2.25rem;
+  display: flex;
+  align-items: center;
+  padding: 0 0.75rem;
+  border: 2px dashed #6366f1;
+  border-radius: 0.5rem;
+  background: rgba(99, 102, 241, 0.15);
+  color: #c7d2fe;
+  font: 600 0.75rem system-ui, sans-serif;
+  pointer-events: none;
+}
+
+.uif-isolated-bar {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 0.6rem;
+  background: rgba(17, 24, 39, 0.94);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #e5e7eb;
+  max-width: calc(100vw - 8px);
+}
+.uif-isolated-bar.is-dragging { opacity: 0.85; }
+.uif-isolated-tools { display: flex; align-items: center; gap: 0.125rem; flex: none; }
+.uif-bar-tool {
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+}
+.uif-bar-tool:hover { background: rgba(148, 163, 184, 0.2); color: #fff; }
+.uif-isolated-bar .uif-bar-grip { cursor: move; height: 1.8rem; }
+/* Sideways: the isolated row stands up */
+.uif-isolated-bar.is-vertical { flex-direction: column; max-height: calc(100vh - 8px); max-width: none; }
+.uif-isolated-bar.is-vertical .uif-isolated-tools { flex-direction: column; }
+.uif-actionbar.is-vertical { flex-direction: column; }
+.uif-actionbar.is-vertical .uif-actionbar-items { flex-direction: column; overflow-x: hidden; overflow-y: auto; max-height: calc(100vh - 140px); }
+.uif-actionbar.is-vertical .uif-palette { bottom: auto; top: 0; left: calc(100% + 0.5rem); }
+
+/* Handheld: full width at the edge it is docked to, touch-sized targets, no zoom on focus */
+.is-handheld { --uif-bar-h: 2.75rem; }
+.is-handheld.docked-bottom,
+.is-handheld.docked-top {
+  left: 0 !important;
+  right: 0 !important;
+  width: auto !important;
+  max-width: none !important;
+  transform: none !important;
+  border-radius: 0.75rem 0.75rem 0 0;
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+.is-handheld.docked-top { border-radius: 0 0 0.75rem 0.75rem; padding-top: max(0.5rem, env(safe-area-inset-top)); }
+.is-handheld .ultimate-textarea { font-size: 16px; }
+.is-handheld .uif-action,
+.is-handheld .uif-mode-toggle,
+.is-handheld .uif-windows-toggle,
+.is-handheld .uif-send { min-width: 2.75rem; height: 2.75rem; }
+.is-handheld .uif-bar-grip { width: 1.6rem; }
+.is-handheld .uif-palette,
+.is-handheld .uif-windows-list { position: fixed; left: 8px; right: 8px; bottom: calc(var(--uif-bar-h) * 2 + 2rem); width: auto; }
+@media (max-width: 640px) {
+  .uif-output, .uif-window { max-width: calc(100vw - 16px); }
+  .uif-termlog { max-height: 40vh; }
+}
+
+.uif-output-buttons button.is-on { color: var(--uif-color); }
+
+/* Narrow fields (by the field's own width, whatever the page): the side modules and the status line give way,
+   so the button row always shows at least two buttons. */
+.ultimate-input-field { container-type: inline-size; container-name: uif; }
+.uif-bar-slot { min-width: 4.75rem; }
+@container uif (max-width: 460px) {
+  .uif-modules, .uif-status { display: none; }
+}
+@container uif (max-width: 300px) {
+  .uif-windows-toggle { width: 1.75rem; }
+}

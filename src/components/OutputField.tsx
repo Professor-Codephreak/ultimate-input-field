@@ -18,6 +18,8 @@ interface ViewProps {
   /** Keep a reply in .memory. Shows a ◈ button on replies when set. */
   onRemember?: (text: string) => void;
   onPopOut?: () => void;
+  /** Read replies aloud: shows a 🔊 toggle when set. */
+  onSpeak?: () => void;
   onHome?: () => void;
   onClose: () => void;
 }
@@ -34,6 +36,7 @@ export function OutputView({
   onSubmit,
   onRemember,
   onPopOut,
+  onSpeak,
   onHome,
   onClose,
 }: ViewProps) {
@@ -99,6 +102,17 @@ export function OutputView({
         )}
         {active && <span className="uif-output-badge">active</span>}
         <span className="uif-output-buttons" onPointerDown={e => e.stopPropagation()}>
+          {onSpeak && (
+            <button
+              type="button"
+              className={field.speak ? 'is-on' : ''}
+              title={field.speak ? 'Stop reading replies aloud' : 'Read replies aloud'}
+              aria-pressed={!!field.speak}
+              onClick={onSpeak}
+            >
+              {field.speak ? '🔊' : '🔈'}
+            </button>
+          )}
           {onPopOut && (
             <button type="button" title="Pop out to a window" onClick={onPopOut}>⧉</button>
           )}
@@ -207,6 +221,7 @@ export function OutputField({ field }: { field: OutputFieldData }) {
         onSubmit={text => sendTo(text, field.id)}
         onRemember={text => void context.remember(text, 'response')}
         onPopOut={() => outputs.popOut(field.id)}
+        onSpeak={() => outputs.setSpeak(field.id, !field.speak)}
         onClose={() => outputs.close(field.id)}
       />
       <ResizeCorners onStart={startResize} />

@@ -13,6 +13,8 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
  */
 async function* echoBot(text: string, meta: SendMeta) {
   await sleep(250);
+  // Fields added here land in this exchange's .history record.
+  meta.annotate({ engine: 'demo echo' });
   const { persona, memory } = meta.context;
   const who = persona?.name ? ` (as ${persona.name}${memory.length ? `, remembering ${memory.length} note${memory.length === 1 ? '' : 's'}` : ''})` : '';
   for (const word of `You said: ${text}${who}`.split(/(\s+)/)) {
