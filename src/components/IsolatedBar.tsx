@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { IsolatedBar as IsolatedBarState } from '../core/profile';
 import { useDragResize } from '../hooks/useDragResize';
@@ -42,8 +42,26 @@ export function IsolatedBar({ state, onChange, children }: Props) {
     setPosition({ x: state.x, y: state.y });
   }, [state.x, state.y, setPosition]);
 
+  // The whole bar stays on screen: a long row standing up near the bottom moves up until its last button shows,
+  // and again when the window shrinks.
+  const barRef = useRef<HTMLDivElement>(null);
+  const fit = () => {
+    const el = barRef.current;
+    if (!el || isDragging) return;
+    const r = el.getBoundingClientRect();
+    const x = Math.max(4, Math.min(r.left, window.innerWidth - r.width - 4));
+    const y = Math.max(4, Math.min(r.top, window.innerHeight - r.height - 4));
+    if (Math.abs(x - r.left) > 0.5 || Math.abs(y - r.top) > 0.5) setPosition({ x, y });
+  };
+  useLayoutEffect(fit);
+  useEffect(() => {
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  });
+
   return createPortal(
     <div
+      ref={barRef}
       className={`uif-isolated-bar ${state.vertical ? 'is-vertical' : ''} ${isDragging ? 'is-dragging' : ''}`}
       style={{ left: position.x, top: position.y, zIndex: zIndexOf(BAR_KEY) }}
       onPointerDownCapture={() => raise(BAR_KEY)}
