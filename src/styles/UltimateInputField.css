@@ -58,53 +58,6 @@
   box-shadow: 0 0 20px rgba(74, 222, 128, 0.5);
 }
 
-/* Enhanced corner resize tabs */
-.corner-tab {
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  background: rgba(99, 102, 241, 0.8);
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  z-index: 10;
-  transition: all 0.2s ease;
-  opacity: 0.6;
-}
-
-.corner-tab:hover {
-  background: rgba(99, 102, 241, 1);
-  transform: scale(1.3);
-  opacity: 1;
-  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
-}
-
-.corner-tab.br { 
-  right: -2px; 
-  bottom: -2px; 
-  cursor: nwse-resize;
-  border-radius: 0 0 4px 0;
-}
-
-.corner-tab.bl { 
-  left: -2px; 
-  bottom: -2px; 
-  cursor: nesw-resize;
-  border-radius: 0 0 0 4px;
-}
-
-.corner-tab.tr { 
-  right: -2px; 
-  top: -2px; 
-  cursor: nesw-resize;
-  border-radius: 0 4px 0 0;
-}
-
-.corner-tab.tl { 
-  left: -2px; 
-  top: -2px; 
-  cursor: nwse-resize;
-  border-radius: 4px 0 0 0;
-}
-
 /* Subtle drag handle that only appears on hover */
 .drag-handle {
   height: 6px;
@@ -252,11 +205,6 @@
 .ultimate-menu-divider {
   border-top: 1px solid rgba(255, 255, 255, 0.2);
   margin: 0.25rem 0;
-}
-
-/* Corner tabs container */
-.corner-tabs {
-  position: relative;
 }
 
 /* Transitions */
@@ -571,7 +519,6 @@
   z-index: 990;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   border-radius: 0.5rem;
   background: rgba(17, 24, 39, 0.92);
   border: 1px solid rgba(148, 163, 184, 0.25);
@@ -632,15 +579,6 @@
 .uif-msg-system { align-self: center; color: #94a3b8; font-size: 0.8rem; }
 .uif-caret { animation: uif-blink 1s steps(1) infinite; color: var(--uif-color); }
 
-.uif-output-resize {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 14px;
-  height: 14px;
-  cursor: nwse-resize;
-  background: linear-gradient(135deg, transparent 50%, rgba(148, 163, 184, 0.5) 50%);
-}
 
 .uif-flash {
   position: absolute;
@@ -697,4 +635,55 @@
 
 @media (prefers-reduced-motion: reduce) {
   .uif-beacon, .uif-tether.is-remote, .uif-flash { animation: none; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Resize corners (input field and output panels)                     */
+/* ------------------------------------------------------------------ */
+
+/* Each grip is a bracket drawn on the corner, with a larger invisible hit area. */
+.uif-corner {
+  --uif-grip: 18px;
+  --uif-grip-color: rgba(99, 102, 241, 0.9);
+  position: absolute;
+  z-index: 10;
+  width: var(--uif-grip);
+  height: var(--uif-grip);
+  touch-action: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.uif-corner::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 0 solid var(--uif-grip-color);
+  transition: width 0.15s ease, height 0.15s ease, border-color 0.15s ease;
+}
+.uif-corner.tl { top: -4px; left: -4px; cursor: nwse-resize; }
+.uif-corner.tr { top: -4px; right: -4px; cursor: nesw-resize; }
+.uif-corner.bl { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.uif-corner.br { bottom: -4px; right: -4px; cursor: nwse-resize; }
+.uif-corner.tl::after { top: 3px; left: 3px; border-top-width: 2px; border-left-width: 2px; border-top-left-radius: 4px; }
+.uif-corner.tr::after { top: 3px; right: 3px; border-top-width: 2px; border-right-width: 2px; border-top-right-radius: 4px; }
+.uif-corner.bl::after { bottom: 3px; left: 3px; border-bottom-width: 2px; border-left-width: 2px; border-bottom-left-radius: 4px; }
+.uif-corner.br::after { bottom: 3px; right: 3px; border-bottom-width: 2px; border-right-width: 2px; border-bottom-right-radius: 4px; }
+
+.ultimate-input-field:hover > .uif-corner,
+.uif-output:hover > .uif-corner,
+.uif-corner:active {
+  opacity: 1;
+}
+.uif-corner:hover::after,
+.uif-corner:active::after {
+  width: 14px;
+  height: 14px;
+  border-color: #818cf8;
+}
+.uif-output > .uif-corner { --uif-grip-color: var(--uif-color); }
+
+/* Touch screens have no hover: keep the grips visible and easier to hit. */
+@media (pointer: coarse) {
+  .uif-corner { --uif-grip: 28px; opacity: 0.8; }
 }

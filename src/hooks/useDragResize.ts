@@ -29,6 +29,9 @@ interface Gesture {
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
+/** Pixels of a dragged panel that always stay inside the viewport. */
+const KEEP_VISIBLE = 60;
+
 /** Pointer-driven move and corner resize for a fixed-position panel. */
 export function useDragResize(opts: Options) {
   const [position, setPosition] = useState(opts.initialPosition);
@@ -59,15 +62,24 @@ export function useDragResize(opts: Options) {
     const move = (e: PointerEvent) => {
       const dx = e.clientX - gesture.startX;
       const dy = e.clientY - gesture.startY;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
       if (gesture.kind === 'drag') {
-        setPosition({ x: gesture.x + dx, y: gesture.y + dy });
+        // Keep enough of the panel on screen to grab it again.
+        setPosition({
+          x: clamp(gesture.x + dx, KEEP_VISIBLE - gesture.width, vw - KEEP_VISIBLE),
+          y: clamp(gesture.y + dy, 0, vh - KEEP_VISIBLE / 2),
+        });
         return;
       }
       const { minWidth, maxWidth, minHeight, maxHeight } = live.current.opts;
       const left = gesture.corner === 'tl' || gesture.corner === 'bl';
       const top = gesture.corner === 'tl' || gesture.corner === 'tr';
-      const width = clamp(gesture.width + (left ? -dx : dx), minWidth, maxWidth);
-      const height = clamp(gesture.height + (top ? -dy : dy), minHeight, maxHeight);
+      // The edge being moved stops at the viewport edge; the opposite corner stays put.
+      const roomX = left ? gesture.x + gesture.width : vw - gesture.x;
+      const roomY = top ? gesture.y + gesture.height : vh - gesture.y;
+      const width = clamp(gesture.width + (left ? -dx : dx), minWidth, Math.max(minWidth, Math.min(maxWidth, roomX)));
+      const height = clamp(gesture.height + (top ? -dy : dy), minHeight, Math.max(minHeight, Math.min(maxHeight, roomY)));
       setSize({ width, height });
       setPosition({
         x: left ? gesture.x + gesture.width - width : gesture.x,
