@@ -1,19 +1,59 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { UltimateInputFieldProps } from '../types';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type { ActionContext, DockEdge, LogKind, UIFMode, UltimateInputFieldProps } from '../types';
+import type { Action } from '../core/actions';
+import { parseCommand } from '../core/commands';
+import { useDragResize, type Corner } from '../hooks/useDragResize';
 import { Button } from './ui/Button';
-import { IconSend, IconTerminal, IconType, IconMenu, IconX } from './ui/Icons';
+import { IconSend, IconTerminal, IconType } from './ui/Icons';
+import { ActionBar } from './ActionBar';
+import { UIFProvider, useOptionalUIF, useUIF } from './UIFContext';
 import '../styles/UltimateInputField.css';
 
+interface LogLine {
+  id: number;
+  kind: LogKind;
+  text: string;
+}
 
-export const UltimateInputField: React.FC<UltimateInputFieldProps> = ({
-  value,
+const MAX_LOG = 300;
+const CORNERS: { corner: Corner; arrow?: string }[] = [
+  { corner: 'br', arrow: '↘' },
+  { corner: 'bl', arrow: '↙' },
+  { corner: 'tr', arrow: '↗' },
+  { corner: 'tl' },
+];
+
+function isAsyncIterable(v: unknown): v is AsyncIterable<string> {
+  return !!v && typeof (v as AsyncIterable<string>)[Symbol.asyncIterator] === 'function';
+}
+
+/**
+ * The hub of the bar: chat input, T terminal, extensible action buttons.
+ * Works on its own, or inside <UltimateBar>/<UIFProvider> to share outputs.
+ */
+export const UltimateInputField: React.FC<UltimateInputFieldProps> = props => {
+  const ctx = useOptionalUIF();
+  if (ctx) return <HubField {...props} />;
+  return (
+    <UIFProvider storageKey={props.storageKey} popoutUrl={props.popoutUrl} defaultStrings={props.defaultStrings}>
+      <HubField {...props} />
+    </UIFProvider>
+  );
+};
+
+const HubField: React.FC<UltimateInputFieldProps> = ({
+  value: controlledValue,
   onChange,
   onSend,
-  isLoading = false,
+  onCommand,
+  onAction,
+  onModeChange,
+  actions: extraActions,
+  isLoading: externalLoading = false,
   className = '',
   placeholder,
   disabled = false,
-  mode: initialMode = 'text',
+  mode: initialMode = 'chat',
   initialPosition,
   initialSize = { width: 600, height: 120 },
   minWidth = 300,
@@ -23,318 +63,336 @@ export const UltimateInputField: React.FC<UltimateInputFieldProps> = ({
   draggable = true,
   resizable = true,
   dockable = true,
-  glowEffect = true
+  glowEffect = true,
+  glassEffect = true,
+  left,
+  right,
 }) => {
-  const [position, setPosition] = useState(initialPosition || { 
-    x: window.innerWidth/2 - initialSize.width/2, 
-    y: window.innerHeight/2 - initialSize.height/2 
-  });
-  const [isDragging, setIsDragging] = useState(false);
+  const uif = useUIF();
+  const { registry, outputs, strings, setStrings, hubRef, requestScreens } = uif;
+
+  const [innerValue, setInnerValue] = useState('');
+  const value = controlledValue ?? innerValue;
+  const setValue = useCallback(
+    (v: string) => {
+      if (controlledValue === undefined) setInnerValue(v);
+      onChange?.(v);
+    },
+    [controlledValue, onChange],
+  );
+
+  const [mode, setModeState] = useState<UIFMode>(initialMode === 'text' ? 'chat' : initialMode);
+  const [docked, setDocked] = useState<DockEdge | null>(null);
   const [isGlowing, setIsGlowing] = useState(false);
-  const [isDocked, setIsDocked] = useState<string | null>(null);
-  const [isMenuVisible, setIsMenuVisible] = useState(false);
-  const [mode, setMode] = useState(initialMode);
-  const [size, setSize] = useState(initialSize);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [log, setLog] = useState<LogLine[]>([]);
+  const [status, setStatus] = useState<LogLine | null>(null);
+  const history = useRef<string[]>([]);
+  const historyIndex = useRef(-1);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [isResizing, setIsResizing] = useState(false);
-  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: initialSize.width, height: initialSize.height });
-  const [resizeCorner, setResizeCorner] = useState<string | null>(null);
-  // Removed unused state to fix build errors
-  // const [menuItems, setMenuItems] = useState<MenuItem[]>([
-  //   { id: 'dock-top', label: 'Dock to Top', action: () => handleDock('top'), type: 'dock' },
-  //   { id: 'dock-bottom', label: 'Dock to Bottom', action: () => handleDock('bottom'), type: 'dock' },
-  //   { id: 'dock-left', label: 'Dock to Left', action: () => handleDock('left'), type: 'dock' },
-  //   { id: 'dock-right', label: 'Dock to Right', action: () => handleDock('right'), type: 'dock' },
-  //   { id: 'undock', label: 'Undock', action: () => handleDock(null), type: 'dock' }
-  // ]);
-  // const [newMenuItemLabel, setNewMenuItemLabel] = useState('');
-  // const [isAddingMenuItem, setIsAddingMenuItem] = useState(false);
+  const logRef = useRef<HTMLDivElement>(null);
+  const logSeq = useRef(0);
 
-  // Drag logic
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (isDocked || !draggable) return;
-    setIsDragging(true);
-    setDragOffset({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y
-    });
-    e.preventDefault();
-  };
-  
-  const handlePointerMove = (e: PointerEvent) => {
-    if (isDragging && !isDocked && draggable) {
-      setPosition({
-        x: e.clientX - dragOffset.x,
-        y: e.clientY - dragOffset.y
-      });
-    }
-    if (isResizing && resizable) {
-      const dx = e.clientX - resizeStart.x;
-      const dy = e.clientY - resizeStart.y;
-      
-      let newWidth = resizeStart.width;
-      let newHeight = resizeStart.height;
-      let newX = position.x;
-      let newY = position.y;
-      
-      switch (resizeCorner) {
-        case 'br':
-          // Bottom-right: add to width and height (working correctly)
-          newWidth = Math.max(minWidth, Math.min(maxWidth, resizeStart.width + dx));
-          newHeight = Math.max(minHeight, Math.min(maxHeight, resizeStart.height + dy));
-          break;
-        case 'bl':
-          // Bottom-left: add to height, subtract from width (expand left)
-          newWidth = Math.max(minWidth, Math.min(maxWidth, resizeStart.width - dx));
-          newHeight = Math.max(minHeight, Math.min(maxHeight, resizeStart.height + dy));
-          newX = position.x + (resizeStart.width - newWidth);
-          break;
-        case 'tr':
-          // Top-right: add to width, subtract from height (expand up)
-          newWidth = Math.max(minWidth, Math.min(maxWidth, resizeStart.width + dx));
-          newHeight = Math.max(minHeight, Math.min(maxHeight, resizeStart.height - dy));
-          newY = position.y + (resizeStart.height - newHeight);
-          break;
-        case 'tl':
-          // Top-left: subtract from both width and height (expand left and up)
-          newWidth = Math.max(minWidth, Math.min(maxWidth, resizeStart.width - dx));
-          newHeight = Math.max(minHeight, Math.min(maxHeight, resizeStart.height - dy));
-          newX = position.x + (resizeStart.width - newWidth);
-          newY = position.y + (resizeStart.height - newHeight);
-          break;
-      }
-      
-      setSize({ width: newWidth, height: newHeight });
-      if (resizeCorner === 'bl' || resizeCorner === 'tr' || resizeCorner === 'tl') {
-        setPosition({ x: newX, y: newY });
-      }
-    }
-  };
-  
-  const handlePointerUp = () => {
-    setIsDragging(false);
-    setIsResizing(false);
-    setResizeCorner(null);
-  };
-  
+  const { position, size, setPosition, isDragging, startDrag, startResize } = useDragResize({
+    initialPosition: initialPosition ?? {
+      x: window.innerWidth / 2 - initialSize.width / 2,
+      y: window.innerHeight / 2 - initialSize.height / 2,
+    },
+    initialSize,
+    minWidth,
+    maxWidth,
+    minHeight,
+    maxHeight,
+    draggable: draggable && !docked,
+    resizable,
+  });
+
+  // Actions passed as props join the shared registry while this field is mounted.
   useEffect(() => {
-    if (isDragging || isResizing) {
-      document.addEventListener('pointermove', handlePointerMove);
-      document.addEventListener('pointerup', handlePointerUp);
-      return () => {
-        document.removeEventListener('pointermove', handlePointerMove);
-        document.removeEventListener('pointerup', handlePointerUp);
-      };
-    }
-  }, [isDragging, isResizing, isDocked, draggable, resizable, resizeCorner, resizeStart, position, dragOffset, minWidth, maxWidth, minHeight, maxHeight]);
+    extraActions?.forEach(a => registry.register(a));
+    return () => extraActions?.forEach(a => registry.unregister(a.id));
+  }, [extraActions, registry]);
 
-  // Enhanced glow effect
-  const triggerGlowEffect = () => {
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, [mode]);
+
+  useEffect(() => {
+    const el = logRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [log]);
+
+  useEffect(() => {
+    if (!status) return;
+    const t = setTimeout(() => setStatus(null), 3500);
+    return () => clearTimeout(t);
+  }, [status]);
+
+  const print = useCallback((text: string, kind: LogKind = 'out') => {
+    const line = { id: logSeq.current++, kind, text };
+    setLog(prev => [...prev.slice(-MAX_LOG + 1), line]);
+    if (kind !== 'cmd') setStatus(line);
+  }, []);
+
+  const triggerGlow = useCallback(() => {
     if (!glowEffect) return;
     setIsGlowing(true);
     setTimeout(() => setIsGlowing(false), 500);
-  };
+  }, [glowEffect]);
 
-  // Dock logic with smooth transitions
-  const handleDock = (edge: string | null) => {
-    if (!dockable) return;
-    setIsDocked(edge);
-    setIsMenuVisible(false);
-    if (edge === null) {
-      setPosition({ x: window.innerWidth/2 - size.width/2, y: window.innerHeight/2 - size.height/2 });
+  const setMode = useCallback(
+    (next: UIFMode | 'toggle') => {
+      setModeState(prev => {
+        const m = next === 'toggle' ? (prev === 'chat' ? 'terminal' : 'chat') : next;
+        if (m !== prev) onModeChange?.(m);
+        return m;
+      });
+    },
+    [onModeChange],
+  );
+
+  const dock = useCallback(
+    (edge: DockEdge | null) => {
+      if (!dockable) return;
+      setDocked(edge);
+      if (edge === null) {
+        setPosition({ x: window.innerWidth / 2 - size.width / 2, y: window.innerHeight / 2 - size.height / 2 });
+      }
+    },
+    [dockable, setPosition, size.width, size.height],
+  );
+
+  const send = useCallback(
+    async (text: string) => {
+      if (!text.trim()) return;
+      let id = outputs.resolve(undefined);
+      if (!id) id = outputs.spawn();
+      outputs.append(id, { role: 'user', text });
+      triggerGlow();
+      const result = onSend?.(text, { outputId: id });
+      if (result === undefined) return;
+      if (typeof result === 'string') {
+        outputs.append(id, { role: 'assistant', text: result });
+        return;
+      }
+      const mid = outputs.append(id, { role: 'assistant', text: '', pending: true });
+      setBusy(true);
+      try {
+        if (isAsyncIterable(result)) {
+          let acc = '';
+          for await (const chunk of result) {
+            acc += chunk;
+            outputs.update(id, mid, { text: acc });
+          }
+          outputs.update(id, mid, { pending: false });
+        } else {
+          const reply = await result;
+          outputs.update(id, mid, { text: reply ?? '', pending: false });
+        }
+      } catch (err) {
+        outputs.update(id, mid, { text: `Error: ${(err as Error).message ?? err}`, pending: false });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [onSend, outputs, triggerGlow],
+  );
+
+  // runCommand and runAction call each other (custom actions run command lines).
+  const runCommandRef = useRef<(line: string) => void>(() => {});
+
+  const makeContext = useCallback(
+    (args: string[]): ActionContext => ({
+      args,
+      print,
+      clearLog: () => setLog([]),
+      send: text => void send(text),
+      runCommand: line => runCommandRef.current(line),
+      mode,
+      setMode,
+      docked,
+      dock,
+      strings,
+      setStrings,
+      outputs,
+      registry,
+      requestScreens: async () => print(await requestScreens()),
+    }),
+    [print, send, mode, setMode, docked, dock, strings, setStrings, outputs, registry, requestScreens],
+  );
+
+  const runAction = useCallback(
+    async (action: Action, args: string[] = []) => {
+      try {
+        await action.run(makeContext(args));
+        onAction?.(action, args);
+      } catch (err) {
+        print(`${action.command}: ${(err as Error).message ?? err}`, 'err');
+      }
+    },
+    [makeContext, onAction, print],
+  );
+
+  const runCommand = useCallback(
+    (line: string) => {
+      print(`❯ ${line}`, 'cmd');
+      const parsed = parseCommand(line, registry);
+      if (!parsed) return;
+      if (parsed.action) return void runAction(parsed.action, parsed.args);
+      const handled = onCommand?.(parsed.name, parsed.args, makeContext(parsed.args));
+      if (typeof handled === 'string') print(handled);
+      else if (!onCommand) print(`unknown command: ${parsed.name} (try help)`, 'err');
+    },
+    [makeContext, onCommand, print, registry, runAction],
+  );
+  runCommandRef.current = runCommand;
+
+  const submit = () => {
+    const text = value;
+    if (!text.trim()) return;
+    if (mode === 'terminal' || text.startsWith('/')) {
+      history.current = [...history.current.filter(h => h !== text), text].slice(-100);
+      historyIndex.current = -1;
+      runCommand(text.trim());
+      triggerGlow();
+    } else {
+      void send(text);
     }
+    setValue('');
   };
 
-  // Keyboard send
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      onSend();
-      triggerGlowEffect();
+      submit();
+      return;
     }
-  };
-
-  // Enhanced resize logic for corner tabs
-  const handleCornerResizePointerDown = (e: React.PointerEvent, corner: string) => {
-    if (!resizable) return;
-    setIsResizing(true);
-    setResizeCorner(corner);
-    setResizeStart({ x: e.clientX, y: e.clientY, width: size.width, height: size.height });
-    e.stopPropagation();
+    if (mode !== 'terminal' || value.includes('\n') || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    const h = history.current;
+    if (!h.length) return;
     e.preventDefault();
+    let i = historyIndex.current;
+    if (e.key === 'ArrowUp') i = i === -1 ? h.length - 1 : Math.max(0, i - 1);
+    else i = i === -1 ? -1 : i + 1 >= h.length ? -1 : i + 1;
+    historyIndex.current = i;
+    setValue(i === -1 ? '' : h[i]);
   };
 
-  // Focus textarea on mount
-  useEffect(() => {
-    if (textareaRef.current) textareaRef.current.focus();
-  }, []);
+  const setHub = useCallback(
+    (el: HTMLDivElement | null) => {
+      hubRef.current = el;
+    },
+    [hubRef],
+  );
 
-  // Docked style with enhanced positioning
-  let dockStyle: React.CSSProperties = {};
-  if (isDocked === 'top') dockStyle = { top: 0, left: '50%', transform: 'translateX(-50%)', right: 'auto', bottom: 'auto' };
-  if (isDocked === 'bottom') dockStyle = { bottom: 0, left: '50%', transform: 'translateX(-50%)', top: 'auto', right: 'auto' };
-  if (isDocked === 'left') dockStyle = { left: 0, top: '50%', transform: 'translateY(-50%)', right: 'auto', bottom: 'auto' };
-  if (isDocked === 'right') dockStyle = { right: 0, top: '50%', transform: 'translateY(-50%)', left: 'auto', bottom: 'auto' };
-  if (!isDocked) dockStyle = { left: position.x, top: position.y, width: size.width, height: size.height };
+  let dockStyle: React.CSSProperties = { left: position.x, top: position.y };
+  if (docked === 'top') dockStyle = { top: 0, left: '50%', transform: 'translateX(-50%)' };
+  if (docked === 'bottom') dockStyle = { bottom: 0, left: '50%', transform: 'translateX(-50%)' };
+  if (docked === 'left') dockStyle = { left: 0, top: '50%', transform: 'translateY(-50%)' };
+  if (docked === 'right') dockStyle = { right: 0, top: '50%', transform: 'translateY(-50%)' };
 
+  const isLoading = externalLoading || busy;
+  const terminal = mode === 'terminal';
   const containerClasses = [
     'ultimate-input-field',
     isGlowing ? 'animate-glow' : '',
-    isDocked ? 'transition-all duration-300 ease-out' : '',
-    mode === 'terminal' ? 'terminal-glass' : 'glass-effect',
-    className
-  ].filter(Boolean).join(' ');
-
-  const defaultPlaceholder = mode === 'text' ? 'Type a message...' : 'Enter command...';
+    docked ? `transition-all is-docked docked-${docked}` : '',
+    terminal ? 'terminal-glass' : glassEffect ? 'glass-effect' : '',
+    terminal ? 'is-terminal' : 'is-chat',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div
-      ref={containerRef}
+      ref={setHub}
       className={containerClasses}
-      style={{
-        ...dockStyle,
-        width: size.width,
-        height: size.height,
-        minWidth: minWidth,
-        maxWidth: maxWidth,
-        minHeight: minHeight,
-      }}
+      style={{ ...dockStyle, width: size.width, height: size.height, minWidth, maxWidth, minHeight }}
     >
-      {/* Subtle drag handle that only appears on hover */}
-      {draggable && (
-        <div
-          className={`drag-handle ${isDragging ? 'dragging' : ''}`}
-          onPointerDown={handlePointerDown}
-        >
+      {terminal && (
+        <div className="uif-termlog" ref={logRef} role="log" aria-live="polite">
+          {log.length === 0 && <div className="uif-termline is-dim">T mode: type a command, or help</div>}
+          {log.map(l => (
+            <div key={l.id} className={`uif-termline is-${l.kind}`}>
+              {l.text}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {draggable && !docked && (
+        <div className={`drag-handle ${isDragging ? 'dragging' : ''}`} onPointerDown={startDrag}>
           <div className="drag-indicator" />
         </div>
       )}
-      
-      {/* Enhanced textarea */}
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder || defaultPlaceholder}
-        disabled={disabled || isLoading}
-        className={`ultimate-textarea ${mode === 'terminal' ? 'terminal-mode' : 'text-mode'} ${isDragging ? 'pointer-events-none' : ''}`}
-        style={{ maxHeight: 200 }}
-      />
-      
-      {/* Enhanced controls */}
-      <div className="ultimate-controls">
-        <div className="ultimate-controls-left">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setMode(mode === 'text' ? 'terminal' : 'text')}
-            type="button"
-          >
-            {mode === 'text' ? <IconTerminal /> : <IconType />}
-          </Button>
-          {dockable && (
+
+      <div className="uif-row">
+        {left && <div className="uif-modules uif-modules-left">{left}</div>}
+        <div className="uif-core">
+          <div className="uif-prompt">
+            {terminal && <span className="uif-prompt-sigil">❯</span>}
+            <textarea
+              ref={textareaRef}
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder || (terminal ? 'Enter command… (help)' : 'Type a message…  (/command runs an action)')}
+              disabled={disabled}
+              spellCheck={!terminal}
+              className={`ultimate-textarea ${terminal ? 'terminal-mode' : 'text-mode'} ${isDragging ? 'pointer-events-none' : ''}`}
+            />
+          </div>
+          <div className="ultimate-controls">
+            <div className="ultimate-controls-left">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`uif-mode-toggle ${terminal ? 'is-terminal' : ''}`}
+                onClick={() => setMode('toggle')}
+                type="button"
+                title={terminal ? 'Switch to chat' : 'Switch to T terminal mode'}
+                aria-label={terminal ? 'Switch to chat' : 'Switch to terminal mode'}
+              >
+                {terminal ? <IconType /> : <IconTerminal />}
+              </Button>
+              <ActionBar
+                registry={registry}
+                onRun={action => void runAction(action)}
+                pressed={{ strings, dock: !!docked }}
+              />
+            </div>
+            {status && !terminal && <span className={`uif-status is-${status.kind}`}>{status.text}</span>}
             <Button
-              variant="ghost"
+              variant="default"
               size="icon"
-              className="h-8 w-8"
-              onClick={() => setIsMenuVisible(v => !v)}
+              className="uif-send"
+              onClick={submit}
+              disabled={disabled || (isLoading && !terminal) || !value.trim()}
               type="button"
+              aria-label={terminal ? 'Run' : 'Send'}
             >
-              {isMenuVisible ? <IconX /> : <IconMenu />}
-            </Button>
-          )}
-        </div>
-        <Button
-          variant="default"
-          size="icon"
-          className={`h-8 w-8 ${isLoading || !value.trim() ? 'opacity-50 cursor-not-allowed' : ''}`}
-          onClick={() => { onSend(); triggerGlowEffect(); }}
-          disabled={isLoading || !value.trim()}
-          type="button"
-        >
-          <IconSend />
-        </Button>
-      </div>
-      
-      {/* Corner resize tabs - only show when not docked and resizable */}
-      {!isDocked && resizable && (
-        <div className="corner-tabs">
-          <div
-            className="corner-tab br"
-            onPointerDown={(e) => handleCornerResizePointerDown(e, 'br')}
-          />
-          <div
-            className="corner-tab bl"
-            onPointerDown={(e) => handleCornerResizePointerDown(e, 'bl')}
-          />
-          <div
-            className="corner-tab tr"
-            onPointerDown={(e) => handleCornerResizePointerDown(e, 'tr')}
-          />
-          <div
-            className="corner-tab tl"
-            onPointerDown={(e) => handleCornerResizePointerDown(e, 'tl')}
-          />
-        </div>
-      )}
-      
-      {/* Enhanced menu with glass effect */}
-      {isMenuVisible && dockable && (
-        <div className="ultimate-menu">
-          <div className="ultimate-menu-content">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="justify-start text-left"
-              onClick={() => handleDock('top')}
-              type="button"
-            >
-              Dock to Top
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="justify-start text-left"
-              onClick={() => handleDock('bottom')}
-              type="button"
-            >
-              Dock to Bottom
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="justify-start text-left"
-              onClick={() => handleDock('left')}
-              type="button"
-            >
-              Dock to Left
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="justify-start text-left"
-              onClick={() => handleDock('right')}
-              type="button"
-            >
-              Dock to Right
-            </Button>
-            <div className="ultimate-menu-divider" />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="justify-start text-left"
-              onClick={() => handleDock(null)}
-              type="button"
-            >
-              Undock
+              <IconSend />
             </Button>
           </div>
+        </div>
+        {right && <div className="uif-modules uif-modules-right">{right}</div>}
+      </div>
+
+      {!docked && resizable && (
+        <div className="corner-tabs">
+          {CORNERS.map(({ corner, arrow }) => (
+            <div
+              key={corner}
+              className={`corner-tab ${corner} ${arrow ? 'expander' : 'resize-handle'}`}
+              onPointerDown={e => startResize(e, corner)}
+              title={`Resize ${corner}`}
+            >
+              {arrow && <div className={`expander-arrow ${corner}-arrow`}>{arrow}</div>}
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
-}; 
+};

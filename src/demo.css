@@ -1,0 +1,20 @@
+html, body { margin: 0; height: 100%; }
+body {
+  background: radial-gradient(circle at 30% 20%, #1e293b, #0b1120 70%);
+  color: #e5e7eb;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+.dark { color-scheme: dark; }
+.demo-page { min-height: 100vh; }
+.demo-hint { max-width: 640px; margin: 0 auto; padding: 24px 16px; color: #94a3b8; font-size: 14px; line-height: 1.6; }
+.demo-hint code { color: #a7f3d0; }
+.demo-module {
+  font: 600 12px ui-monospace, monospace;
+  color: #cbd5e1;
+  background: none;
+  border: 0;
+  padding: 2px 4px;
+  white-space: nowrap;
+  cursor: default;
+}
+button.demo-module { cursor: pointer; }
